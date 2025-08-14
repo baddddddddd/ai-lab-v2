@@ -25,6 +25,13 @@ def scaled_dot_product_attention(
     return values
 
 
+class NewGELU(nn.Module):
+    def forward(self, x):
+        return (
+            0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.0356774 * x**3)))
+        )
+
+
 class MultiHeadCausalAttention(nn.Module):
     def __init__(self, config: GPT2Config):
         super().__init__()
@@ -63,7 +70,7 @@ class PositionWiseFeedForward(nn.Module):
 
         self.ff = nn.Sequential(
             nn.Linear(config.d_model, config.d_ff),
-            nn.GELU(),
+            NewGELU(),
             nn.Linear(config.d_ff, config.d_model),
         )
 
