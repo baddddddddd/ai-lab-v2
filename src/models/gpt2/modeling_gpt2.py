@@ -4,8 +4,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .configuration_gpt2 import GPT2Config
+from ...utils import BaseStreamer, top_p_sample
 from ..base_model import BaseModel
+from .configuration_gpt2 import GPT2Config
 
 
 def scaled_dot_product_attention(
@@ -119,7 +120,7 @@ class Embedding(nn.Module):
         self.dropout = nn.Dropout(config.dropout)
 
     def forward(self, input_ids: torch.Tensor):
-        # x: (batch_size, seq_len)
+        # input_ids: (batch_size, seq_len)
         n_ctx = input_ids.size(-1)
 
         positions = torch.arange(n_ctx, device=input_ids.device).unsqueeze(0)
@@ -172,3 +173,51 @@ class GPT2Model(BaseModel):
 
         logits = hidden @ self.embedding.token_embedding.weight.T
         return logits
+
+    @torch.no_grad()
+    def generate(
+        self,
+        input_ids,
+        max_new_tokens: int = 1024,
+        temperature: float = 0.8,
+        top_p: float = 0.9,
+        streamer: BaseStreamer | None = None,
+    ):
+        from collections import deque
+
+        generated = deque(input_ids.clone().tolist(), maxlen=self.config.n_ctx)
+        if streamer is not None:
+            streamer.put(input_ids)
+
+        for _ in range(max_new_tokens):
+            model_input = torch.tensor(
+                [generated], dtype=torch.long, device=input_ids.device
+            )
+            logits = self.forward(model_input)
+            logits = logits[0, -1]
+
+            if temperature > 0.0:
+                logits /= temperature
+                if top_p > 0.0:
+                    next_token = top_p_sample(logits, p=top_p)
+                else:
+                    probs = F.softmax(logits, dim=-1)
+                    next_token = torch.multinomial(probs, num_samples=1).item()
+            else:
+                next_token = torch.argmax(logits).item()
+
+            generated.append(next_token)
+
+            if streamer is not None:
+                streamer.put(torch.tensor([next_token], device=input_ids.device))
+
+            if (
+                self.config.eos_token_id is not None
+                and next_token == self.config.eos_token_id
+            ):
+                break
+
+        if streamer is not None:
+            streamer.end()
+
+        return torch.tensor(generated, device=input_ids.device)
