@@ -1,0 +1,51 @@
+import torchinfo
+
+from src.datasets import TinyStoriesDataset
+from src.models.gpt2 import GPT2Config, GPT2Model
+from src.tokenizers import TinyStoriesBpe8kTokenizer
+from src.trainers import CausalLmTrainer, TrainingConfig
+
+
+seq_len = 256
+
+tokenizer = TinyStoriesBpe8kTokenizer(
+    max_length=seq_len, padding=False, return_overflowing_tokens=True
+)
+
+D_MODEL = 384
+N_LAYERS = 6
+model_config = GPT2Config(
+    vocab_size=tokenizer.get_vocab_size(),
+    n_ctx=seq_len,
+    n_layers=N_LAYERS,
+    d_model=D_MODEL,
+    n_heads=D_MODEL // 64,
+    d_ff=D_MODEL * 2,
+    dropout=0.1,
+    eos_token_id=tokenizer.eos_token_id,
+)
+
+training_config = TrainingConfig(
+    output_dir="./checkpoints/gpt2-10m-bpe-tinystories",
+    num_train_epochs=10,
+    learning_rate=1e-3,
+    betas=(0.9, 0.95),
+    weight_decay=0.01,
+    label_smoothing=0.0,
+    train_batch_size=64,
+    save_steps=100,
+)
+
+model = GPT2Model(model_config)
+torchinfo.summary(model)
+
+dataset = TinyStoriesDataset(split="train", tokenizer=tokenizer)
+
+trainer = CausalLmTrainer(
+    model=model,
+    tokenizer=tokenizer,
+    args=training_config,
+    train_dataset=dataset,
+)
+
+trainer.train(resume_from_checkpoint=True)
