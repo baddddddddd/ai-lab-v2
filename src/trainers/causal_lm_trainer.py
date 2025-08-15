@@ -10,11 +10,12 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 
-from .base_trainer import BaseTrainer
-from .training_config import TrainingConfig
 from ..datasets import BaseDataset
 from ..models import BaseModel
 from ..tokenizers import BaseTokenizer
+from .base_trainer import BaseTrainer
+from .training_config import TrainingConfig
+from .schedulers import LinearWarmupCosineAnnealingLR
 
 
 class CausalLmTrainer(BaseTrainer):
@@ -48,6 +49,9 @@ class CausalLmTrainer(BaseTrainer):
             lr=args.learning_rate,
             betas=args.betas,
             weight_decay=args.weight_decay,
+        )
+        self.scheduler = LinearWarmupCosineAnnealingLR(
+            self.optimizer, args.warmup_steps, args.total_steps, args.min_lr
         )
         self.criterion = nn.CrossEntropyLoss(
             ignore_index=self.tokenizer.pad_token_id,
@@ -108,6 +112,7 @@ class CausalLmTrainer(BaseTrainer):
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
 
                 self.optimizer.step()
+                self.scheduler.step()
                 optimizer_steps += 1
 
                 total_loss += loss.item()
@@ -127,7 +132,10 @@ class CausalLmTrainer(BaseTrainer):
 
                     total_loss = 0.0
                     self.log(
-                        batch_progress, avg_loss=avg_loss_log, steps=optimizer_steps
+                        batch_progress,
+                        avg_loss=avg_loss_log,
+                        steps=optimizer_steps,
+                        lr=self.scheduler.get_last_lr()[0],
                     )
 
     def get_latest_checkpoint(self):

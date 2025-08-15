@@ -1,3 +1,4 @@
+from typing import Optional
 import pathlib
 
 
@@ -10,6 +11,9 @@ class TrainingConfig:
         betas: tuple[float, float],
         weight_decay: float,
         train_batch_size: int,
+        warmup_steps: int = 0,
+        total_steps: int = 99999999999,
+        min_lr: float = 0.0,
         label_smoothing: float = 0.0,
         save_strategy: str | None = None,
         save_steps: int | None = None,
@@ -22,6 +26,9 @@ class TrainingConfig:
         self.betas = betas
         self.weight_decay = weight_decay
         self.train_batch_size = train_batch_size
+        self.warmup_steps = warmup_steps
+        self.total_steps = total_steps
+        self.min_lr = min_lr
         self.label_smoothing = label_smoothing
         self.save_strategy = save_strategy
         self.save_steps = save_steps
