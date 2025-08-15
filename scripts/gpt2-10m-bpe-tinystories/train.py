@@ -6,17 +6,19 @@ from src.tokenizers import TinyStoriesBpe8kTokenizer
 from src.trainers import CausalLmTrainer, TrainingConfig
 
 
-seq_len = 256
-
-tokenizer = TinyStoriesBpe8kTokenizer(
-    max_length=seq_len, padding=False, return_overflowing_tokens=True
-)
-
+SEQ_LEN = 256
 D_MODEL = 384
 N_LAYERS = 6
+
+tokenizer = TinyStoriesBpe8kTokenizer(
+    max_length=SEQ_LEN,
+    padding=True,
+    return_overflowing_tokens=True,
+)
+
 model_config = GPT2Config(
     vocab_size=tokenizer.get_vocab_size(),
-    n_ctx=seq_len,
+    n_ctx=SEQ_LEN,
     n_layers=N_LAYERS,
     d_model=D_MODEL,
     n_heads=D_MODEL // 64,
@@ -27,12 +29,12 @@ model_config = GPT2Config(
 
 training_config = TrainingConfig(
     output_dir="./checkpoints/gpt2-10m-bpe-tinystories",
-    num_train_epochs=10,
-    learning_rate=1e-3,
+    num_train_epochs=100,
+    learning_rate=2e-3,
     betas=(0.9, 0.95),
     weight_decay=0.01,
     label_smoothing=0.0,
-    train_batch_size=64,
+    train_batch_size=128,
     save_steps=100,
 )
 
