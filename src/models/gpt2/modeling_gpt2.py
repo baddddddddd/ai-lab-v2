@@ -33,7 +33,7 @@ class NewGELU(nn.Module):
         )
 
 
-class MultiHeadCausalAttention(nn.Module):
+class GPT2Attention(nn.Module):
     def __init__(self, config: GPT2Config):
         super().__init__()
 
@@ -65,7 +65,7 @@ class MultiHeadCausalAttention(nn.Module):
         return output
 
 
-class PositionWiseFeedForward(nn.Module):
+class GPT2MLP(nn.Module):
     def __init__(self, config: GPT2Config):
         super().__init__()
 
@@ -81,16 +81,16 @@ class PositionWiseFeedForward(nn.Module):
         return self.ff(x)
 
 
-class TransformerBlock(nn.Module):
+class GPT2Block(nn.Module):
     def __init__(self, config: GPT2Config):
         super().__init__()
 
         self.pre_attn_norm = nn.LayerNorm(config.d_model, eps=1e-5)
-        self.attn = MultiHeadCausalAttention(config)
+        self.attn = GPT2Attention(config)
         self.post_attn_dropout = nn.Dropout(config.dropout)
 
         self.pre_ff_norm = nn.LayerNorm(config.d_model, eps=1e-5)
-        self.ff = PositionWiseFeedForward(config)
+        self.ff = GPT2MLP(config)
         self.post_ff_dropout = nn.Dropout(config.dropout)
 
     def forward(self, x: torch.Tensor):
@@ -103,7 +103,7 @@ class TransformerBlock(nn.Module):
         return x
 
 
-class Embedding(nn.Module):
+class GPT2Embedding(nn.Module):
     def __init__(self, config: GPT2Config):
         super().__init__()
 
@@ -141,9 +141,9 @@ class GPT2Model(BaseModel):
         super().__init__(config)
 
         self.config = config
-        self.embedding = Embedding(config)
+        self.embedding = GPT2Embedding(config)
         self.transformer_stack = nn.ModuleList(
-            [TransformerBlock(config) for _ in range(config.n_layers)]
+            [GPT2Block(config) for _ in range(config.n_layers)]
         )
 
         self.final_norm = nn.LayerNorm(config.d_model, eps=1e-5)
