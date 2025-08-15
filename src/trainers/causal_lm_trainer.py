@@ -129,13 +129,14 @@ class CausalLmTrainer(BaseTrainer):
 
                     avg_loss_log = f"{avg_loss:.6f}"
                     steps_log = f"{optimizer_steps}"
+                    lr_log = f"{self.scheduler.get_last_lr()[0]:.8f}"
 
                     total_loss = 0.0
                     self.log(
                         batch_progress,
                         avg_loss=avg_loss_log,
                         steps=optimizer_steps,
-                        lr=self.scheduler.get_last_lr()[0],
+                        lr=lr_log,
                     )
 
     def get_latest_checkpoint(self):
