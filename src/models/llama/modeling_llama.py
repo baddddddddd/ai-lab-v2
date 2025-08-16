@@ -114,8 +114,8 @@ class LlamaModel(BaseModel):
         theta = torch.pow(10000, -2 * dims / config.d_head)
         angles = positions[:, None] * theta[None, :]
 
-        self.register_buffer("cos_cached", angles.cos(), persistent=True)
-        self.register_buffer("sin_cached", angles.sin(), persistent=True)
+        self.register_buffer("cos_cached", angles.cos(), persistent=False)
+        self.register_buffer("sin_cached", angles.sin(), persistent=False)
 
         self.apply(self._init_weights)
 
