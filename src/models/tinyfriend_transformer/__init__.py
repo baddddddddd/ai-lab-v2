@@ -1,2 +1,0 @@
-from .tinyfriend_transformer_config import TinyFriendTransformerConfig
-from .tinyfriend_transformer_model import TinyFriendTransformerModel
