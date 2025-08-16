@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ...utils import BaseStreamer
+from ...utils import BaseStreamer, top_p_sample
 from ..base_model import BaseModel
 from .configuration_llama import LlamaConfig
 
@@ -114,8 +114,8 @@ class LlamaModel(BaseModel):
         theta = torch.pow(10000, -2 * dims / config.d_head)
         angles = positions[:, None] * theta[None, :]
 
-        self.register_buffer("cos_cached", angles.cos(), persistent=False)
-        self.register_buffer("sin_cached", angles.sin(), persistent=False)
+        self.register_buffer("cos_cached", angles.cos(), persistent=True)
+        self.register_buffer("sin_cached", angles.sin(), persistent=True)
 
         self.apply(self._init_weights)
 
