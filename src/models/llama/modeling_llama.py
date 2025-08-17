@@ -7,6 +7,15 @@ from ..base_model import BaseModel
 from .configuration_llama import LlamaConfig
 
 
+def precompute_cos_sin_tables(n_ctx: int, d_head):
+    positions = torch.arange(n_ctx, dtype=torch.float32)
+    dims = torch.arange(d_head, dtype=torch.float32) // 2
+    theta = torch.pow(10000, -2 * dims / d_head)
+    angles = positions[:, None] * theta[None, :]
+
+    return angles.cos(), angles.sin()
+
+
 def rotate_half(x: torch.Tensor):
     x1, x2 = x.chunk(2, dim=-1)
     return torch.cat((-x2, x1), dim=-1)
@@ -109,13 +118,9 @@ class LlamaModel(BaseModel):
 
         self.final_norm = nn.RMSNorm(config.d_model, eps=1e-6)
 
-        positions = torch.arange(config.n_ctx, dtype=torch.float32)
-        dims = torch.arange(config.d_head, dtype=torch.float32) // 2
-        theta = torch.pow(10000, -2 * dims / config.d_head)
-        angles = positions[:, None] * theta[None, :]
-
-        self.register_buffer("cos_cached", angles.cos(), persistent=False)
-        self.register_buffer("sin_cached", angles.sin(), persistent=False)
+        cos, sin = precompute_cos_sin_tables(config.n_ctx, config.d_head)
+        self.register_buffer("cos_cached", cos, persistent=False)
+        self.register_buffer("sin_cached", sin, persistent=False)
 
         self.apply(self._init_weights)
 
