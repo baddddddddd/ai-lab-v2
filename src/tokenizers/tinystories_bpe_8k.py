@@ -90,3 +90,9 @@ class TinyStoriesBpe8kTokenizer(BaseTokenizer):
 
     def _convert_tokens_to_string(self, tokens: list[str]) -> str:
         return self.tokenizer.convert_tokens_to_string(tokens)
+
+    def build_inputs_with_special_tokens(self, token_ids: list[int]) -> list[int]:
+        return token_ids + [self.eos_token_id]
+
+    def num_special_tokens_to_add(self):
+        return 1
