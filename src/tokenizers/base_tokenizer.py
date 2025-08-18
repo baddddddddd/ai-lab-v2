@@ -121,6 +121,11 @@ class BaseTokenizer:
     def convert_tokens_to_string(self, tokens: list[str]) -> str:
         return self._convert_tokens_to_string(tokens)
 
+    def _encode(self, text: str, **kwargs) -> list[int]:
+        tokens = self.tokenize(text, **kwargs)
+        ids = self.convert_tokens_to_ids(tokens)
+        return ids
+
     def encode(
         self,
         text: str,
@@ -134,8 +139,7 @@ class BaseTokenizer:
         **kwargs,
     ) -> list[int] | list[list[int]] | torch.Tensor:
         text, kwargs = self.prepare_for_tokenization(text, **kwargs)
-        tokens = self.tokenize(text, **kwargs)
-        ids = self.convert_tokens_to_ids(tokens)
+        ids = self._encode(text, **kwargs)
 
         if truncation:
             if max_length is None:
