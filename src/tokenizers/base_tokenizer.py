@@ -169,6 +169,11 @@ class BaseTokenizer:
                     "padding is set to True, but no max_length was provided."
                 )
 
+            if self.pad_token_id is None:
+                raise ValueError(
+                    "padding is set to True, but no pad_token_id was provided."
+                )
+
             if return_overflowing_tokens:
                 for i in range(len(ids)):
                     pad_len = max_length - len(ids[i])
