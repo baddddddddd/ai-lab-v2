@@ -60,7 +60,7 @@ class BaseTokenizer:
                 input_ids.append(ids)
 
         if return_tensors == "pt":
-            input_ids = torch.stack(input_ids)
+            input_ids = torch.cat(input_ids)
 
         encoded = {
             "input_ids": input_ids,
@@ -104,6 +104,7 @@ class BaseTokenizer:
         return_tensors: str | None = None,
     ) -> list[int] | list[list[int]] | torch.Tensor:
         tokens = self.tokenize(text)
+        ids = self.convert_tokens_to_ids(tokens)
 
         if truncation:
             if max_length is None:
@@ -112,12 +113,9 @@ class BaseTokenizer:
                 )
 
             if return_overflowing_tokens:
-                tokens = [
-                    tokens[i : i + max_length]
-                    for i in range(0, len(tokens), max_length)
-                ]
+                ids = [ids[i : i + max_length] for i in range(0, len(ids), max_length)]
             else:
-                tokens = tokens[:max_length]
+                ids = ids[:max_length]
 
         if padding:
             if max_length is None:
@@ -126,18 +124,13 @@ class BaseTokenizer:
                 )
 
             if return_overflowing_tokens:
-                for i in range(len(tokens)):
-                    pad_len = max_length - len(tokens[i])
-                    tokens[i] += [self.pad_token] * pad_len
+                for i in range(len(ids)):
+                    pad_len = max_length - len(ids[i])
+                    ids[i] += [self.pad_token_id] * pad_len
 
             else:
-                pad_len = max_length - len(tokens)
-                tokens += [self.pad_token] * pad_len
-
-        if return_overflowing_tokens:
-            ids = [self.convert_tokens_to_ids(tok) for tok in tokens]
-        else:
-            ids = self.convert_tokens_to_ids(tokens)
+                pad_len = max_length - len(ids)
+                ids += [self.pad_token_id] * pad_len
 
         if return_tensors == "pt":
             return torch.LongTensor(ids)
