@@ -90,3 +90,12 @@ class LlamaTokenizer(BaseTokenizer):
 
     def num_special_tokens_to_add(self):
         return int(self.add_bos_token) + int(self.add_eos_token)
+
+    def _encode(self, text: str, **kwargs) -> list[int]:
+        return self.tokenizer.encode(text)
+
+    def _decode(self, token_ids: list[int]) -> str:
+        return self.tokenizer.decode(token_ids)
+
+    def _batch_decode(self, sequences: list[list[int]]) -> list[str]:
+        return self.tokenizer.decode(sequences)
