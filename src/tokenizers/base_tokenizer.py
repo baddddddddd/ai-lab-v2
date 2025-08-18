@@ -38,21 +38,23 @@ class BaseTokenizer:
     def __call__(
         self,
         texts: list[str],
-        max_length: int | None = None,
+        add_special_tokens: bool = True,
         padding: bool = False,
         truncation: bool = False,
-        return_overflowing_tokens: bool = False,
+        max_length: int | None = None,
         return_tensors: str | None = None,
+        return_overflowing_tokens: bool = False,
     ) -> list[list[int] | torch.Tensor]:
         input_ids = []
         for text in texts:
             ids = self.encode(
                 text,
-                max_length=max_length,
+                add_special_tokens=add_special_tokens,
                 padding=padding,
                 truncation=truncation,
-                return_overflowing_tokens=return_overflowing_tokens,
+                max_length=max_length,
                 return_tensors=return_tensors,
+                return_overflowing_tokens=return_overflowing_tokens,
             )
             if isinstance(ids[0], list):
                 input_ids += ids
@@ -84,6 +86,16 @@ class BaseTokenizer:
             "_convert_tokens_to_string() method is not implemented"
         )
 
+    def build_inputs_with_special_tokens(self, token_ids: list[int]) -> list[int]:
+        raise NotImplementedError(
+            "build_inputs_with_special_tokens() method is not implemented"
+        )
+
+    def num_special_tokens_to_add(self):
+        raise NotImplementedError(
+            "num_special_tokens_to_add() method is not implemented"
+        )
+
     def tokenize(self, text: str) -> list[str]:
         return self._tokenize(text)
 
@@ -100,11 +112,12 @@ class BaseTokenizer:
     def encode(
         self,
         text: str,
-        max_length: int | None = None,
+        add_special_tokens: bool = True,
         padding: bool = False,
         truncation: bool = False,
-        return_overflowing_tokens: bool = False,
+        max_length: int | None = None,
         return_tensors: str | None = None,
+        return_overflowing_tokens: bool = False,
     ) -> list[int] | list[list[int]] | torch.Tensor:
         tokens = self.tokenize(text)
         ids = self.convert_tokens_to_ids(tokens)
@@ -115,10 +128,24 @@ class BaseTokenizer:
                     "truncation is set to True, but no max_length was provided."
                 )
 
-            if return_overflowing_tokens:
-                ids = [ids[i : i + max_length] for i in range(0, len(ids), max_length)]
+            if add_special_tokens:
+                adjusted_max_length = max_length - self.num_special_tokens_to_add()
             else:
-                ids = ids[:max_length]
+                adjusted_max_length = max_length
+
+            if return_overflowing_tokens:
+                ids = [
+                    ids[i : i + adjusted_max_length]
+                    for i in range(0, len(ids), adjusted_max_length)
+                ]
+            else:
+                ids = ids[:adjusted_max_length]
+
+        if add_special_tokens:
+            if return_overflowing_tokens:
+                ids = [self.build_inputs_with_special_tokens(id_) for id_ in ids]
+            else:
+                ids = self.build_inputs_with_special_tokens(ids)
 
         if padding:
             if max_length is None:
