@@ -41,6 +41,7 @@ class BaseTokenizer:
         padding: bool = False,
         truncation: bool = False,
         max_length: int | None = None,
+        stride: int = 0,
         return_tensors: str | None = None,
         return_overflowing_tokens: bool = False,
         **kwargs,
@@ -53,6 +54,7 @@ class BaseTokenizer:
                 padding=padding,
                 truncation=truncation,
                 max_length=max_length,
+                stride=stride,
                 return_tensors=return_tensors,
                 return_overflowing_tokens=return_overflowing_tokens,
                 **kwargs,
@@ -126,6 +128,7 @@ class BaseTokenizer:
         padding: bool = False,
         truncation: bool = False,
         max_length: int | None = None,
+        stride: int = 0,
         return_tensors: str | None = None,
         return_overflowing_tokens: bool = False,
         **kwargs,
@@ -146,9 +149,10 @@ class BaseTokenizer:
                 adjusted_max_length = max_length
 
             if return_overflowing_tokens:
+                steps = adjusted_max_length - stride
                 ids = [
                     ids[i : i + adjusted_max_length]
-                    for i in range(0, len(ids), adjusted_max_length)
+                    for i in range(0, len(ids) - stride, steps)
                 ]
             else:
                 ids = ids[:adjusted_max_length]
