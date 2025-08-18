@@ -16,15 +16,7 @@ from .base_tokenizer import BaseTokenizer
 class TinyStoriesBpe8kTokenizer(BaseTokenizer):
     SAVE_FILE = "./data/tokenizers/tinystories-bpe-8k.json"
 
-    def __init__(
-        self,
-        max_length: int | None = None,
-        padding: bool = False,
-        return_overflowing_tokens: bool = False,
-        stride: int = 0,
-    ):
-        super().__init__(max_length, padding, return_overflowing_tokens, stride)
-
+    def __init__(self):
         UNK_TOKEN = "<unk>"
         EOS_TOKEN = "<eos>"
         PAD_TOKEN = "<pad>"
