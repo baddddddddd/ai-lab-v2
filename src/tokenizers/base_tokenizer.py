@@ -36,17 +36,36 @@ class BaseTokenizer:
         return self._convert_token_to_id(self.pad_token)
 
     def __call__(
-        self, texts: list[str], return_tensors: str | None = None
+        self,
+        texts: list[str],
+        max_length: int | None = None,
+        padding: bool = False,
+        truncation: bool = False,
+        return_overflowing_tokens: bool = False,
+        return_tensors: str | None = None,
     ) -> list[list[int] | torch.Tensor]:
-        encoded = list(
-            itertools.chain.from_iterable(
-                [self.encode(text, return_tensors=return_tensors) for text in texts]
+        input_ids = []
+        for text in texts:
+            ids = self.encode(
+                text,
+                max_length=max_length,
+                padding=padding,
+                truncation=truncation,
+                return_overflowing_tokens=return_overflowing_tokens,
+                return_tensors=return_tensors,
             )
-        )
+            if isinstance(ids[0], list):
+                input_ids += ids
+            else:
+                input_ids.append(ids)
+
         if return_tensors == "pt":
-            return torch.stack(encoded)
-        else:
-            return encoded
+            input_ids = torch.stack(input_ids)
+
+        encoded = {
+            "input_ids": input_ids,
+        }
+        return encoded
 
     def _tokenize(self, text: str) -> list[str]:
         raise NotImplementedError("_tokenize() method is not implemented")
@@ -62,35 +81,11 @@ class BaseTokenizer:
             "_convert_tokens_to_string() method is not implemented"
         )
 
-    def tokenize(self, text: str) -> list[list[str]]:
-        full_tokens = self._tokenize(text)
-        full_tokens.append(self.eos_token)
+    def tokenize(self, text: str) -> list[str]:
+        return self._tokenize(text)
 
-        if self.max_length is None:
-            return [full_tokens]
-
-        res = []
-        for i in range(
-            0,
-            len(full_tokens) if self.return_overflowing_tokens else 1,
-            self.max_length - self.stride,
-        ):
-            tokens = full_tokens[i : i + self.max_length]
-            res.append(tokens)
-
-        if self.padding:
-            pads = [self.pad_token] * (self.max_length - len(res[-1]))
-            res[-1] += pads
-
-        return res
-
-    def convert_tokens_to_ids(self, tokens_list: list[list[str]]) -> list[list[int]]:
-        res = []
-        for tokens in tokens_list:
-            ids = [self._convert_token_to_id(token) for token in tokens]
-            res.append(ids)
-
-        return res
+    def convert_tokens_to_ids(self, tokens: list[str]) -> list[int]:
+        return [self._convert_token_to_id(tok) for tok in tokens]
 
     def convert_ids_to_tokens(self, ids: list[int] | torch.Tensor) -> list[str]:
         tokens = [self._convert_id_to_token(id_) for id_ in ids]
@@ -100,10 +95,49 @@ class BaseTokenizer:
         return self._convert_tokens_to_string(tokens)
 
     def encode(
-        self, text: str, return_tensors: str | None = None
-    ) -> list[int] | torch.Tensor:
+        self,
+        text: str,
+        max_length: int | None = None,
+        padding: bool = False,
+        truncation: bool = False,
+        return_overflowing_tokens: bool = False,
+        return_tensors: str | None = None,
+    ) -> list[int] | list[list[int]] | torch.Tensor:
         tokens = self.tokenize(text)
-        ids = self.convert_tokens_to_ids(tokens)
+
+        if truncation:
+            if max_length is None:
+                raise ValueError(
+                    "truncation is set to True, but no max_length was provided."
+                )
+
+            if return_overflowing_tokens:
+                tokens = [
+                    tokens[i : i + max_length]
+                    for i in range(0, len(tokens), max_length)
+                ]
+            else:
+                tokens = tokens[:max_length]
+
+        if padding:
+            if max_length is None:
+                raise ValueError(
+                    "padding is set to True, but no max_length was provided."
+                )
+
+            if return_overflowing_tokens:
+                for i in range(len(tokens)):
+                    pad_len = max_length - len(tokens[i])
+                    tokens[i] += [self.pad_token] * pad_len
+
+            else:
+                pad_len = max_length - len(tokens)
+                tokens += [self.pad_token] * pad_len
+
+        if return_overflowing_tokens:
+            ids = [self.convert_tokens_to_ids(tok) for tok in tokens]
+        else:
+            ids = self.convert_tokens_to_ids(tokens)
 
         if return_tensors == "pt":
             return torch.LongTensor(ids)
