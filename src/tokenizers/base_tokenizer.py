@@ -60,7 +60,10 @@ class BaseTokenizer:
                 input_ids.append(ids)
 
         if return_tensors == "pt":
-            input_ids = torch.cat(input_ids)
+            if return_overflowing_tokens:
+                input_ids = torch.cat(input_ids)
+            else:
+                input_ids = torch.stack(input_ids)
 
         encoded = {
             "input_ids": input_ids,
