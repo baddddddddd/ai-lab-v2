@@ -25,18 +25,32 @@ class TinyStoriesBpe8kTokenizer(BaseTokenizer):
     ):
         super().__init__(max_length, padding, return_overflowing_tokens, stride)
 
-        self.unk_token = "<unk>"
-        self.eos_token = "<eos>"
-        self.pad_token = "<pad>"
+        UNK_TOKEN = "<unk>"
+        EOS_TOKEN = "<eos>"
+        PAD_TOKEN = "<pad>"
 
         if os.path.exists(TinyStoriesBpe8kTokenizer.SAVE_FILE):
-            self._load()
+            self._load(
+                unk_token=UNK_TOKEN,
+                eos_token=EOS_TOKEN,
+                pad_token=PAD_TOKEN,
+            )
         else:
             print(f"Training TinyStoriesBpe8kTokenizer...")
-            self.train()
+            self.train(
+                unk_token=UNK_TOKEN,
+                eos_token=EOS_TOKEN,
+                pad_token=PAD_TOKEN,
+            )
 
-    def train(self):
-        tokenizer = Tokenizer(BPE(unk_token=self.unk_token))
+        super().__init__(
+            unk_token=UNK_TOKEN,
+            eos_token=EOS_TOKEN,
+            pad_token=PAD_TOKEN,
+        )
+
+    def train(self, unk_token: str, eos_token: str, pad_token: str):
+        tokenizer = Tokenizer(BPE(unk_token=unk_token))
         tokenizer.normalizer = NFKC()
         tokenizer.pre_tokenizer = ByteLevel(add_prefix_space=True)
         tokenizer.decoder = ByteLevelDecoder()
@@ -44,7 +58,7 @@ class TinyStoriesBpe8kTokenizer(BaseTokenizer):
         trainer = BpeTrainer(
             vocab_size=8192,
             min_frequency=2,
-            special_tokens=[self.unk_token, self.eos_token, self.pad_token],
+            special_tokens=[unk_token, eos_token, pad_token],
             show_progress=True,
         )
 
@@ -60,24 +74,34 @@ class TinyStoriesBpe8kTokenizer(BaseTokenizer):
         )
 
         tokenizer.post_processor = TemplateProcessing(
-            single=f"$A {self.eos_token}",
-            special_tokens=[(self.eos_token, tokenizer.token_to_id(self.eos_token))],
+            single=f"$A {eos_token}",
+            special_tokens=[(eos_token, tokenizer.token_to_id(eos_token))],
         )
 
         os.makedirs(os.path.dirname(TinyStoriesBpe8kTokenizer.SAVE_FILE), exist_ok=True)
         tokenizer.save(TinyStoriesBpe8kTokenizer.SAVE_FILE)
 
-        self._load()
+        self._load(
+            unk_token=unk_token,
+            eos_token=eos_token,
+            pad_token=pad_token,
+        )
 
-    def _load(self):
+    def _load(self, unk_token: str, eos_token: str, pad_token: str):
         self.tokenizer = PreTrainedTokenizerFast(
             tokenizer_file=TinyStoriesBpe8kTokenizer.SAVE_FILE,
-            unk_token=self.unk_token,
-            eos_token=self.eos_token,
-            pad_token=self.pad_token,
+            unk_token=unk_token,
+            eos_token=eos_token,
+            pad_token=pad_token,
         )
 
         self.vocab = self.tokenizer.get_vocab()
+
+    def get_vocab(self) -> dict[str, int]:
+        return self.vocab
+
+    def get_vocab_size(self) -> int:
+        return len(self.vocab)
 
     def _tokenize(self, text: str, **kwargs) -> list[str]:
         return self.tokenizer.tokenize(text, **kwargs)

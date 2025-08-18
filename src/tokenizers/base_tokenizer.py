@@ -8,32 +8,31 @@ import torch
 class BaseTokenizer:
     def __init__(
         self,
-        max_length: int | None = None,
-        padding: bool = False,
-        return_overflowing_tokens: bool = False,
-        stride: int = 0,
+        unk_token: str | None = None,
+        bos_token: str | None = None,
+        eos_token: str | None = None,
+        pad_token: str | None = None,
+        sep_token: str | None = None,
+        cls_token: str | None = None,
+        mask_token: str | None = None,
     ):
-        self.vocab = {}
-        self.unk_token = ""
-        self.eos_token = ""
-        self.pad_token = ""
+        self.unk_token = unk_token
+        self.bos_token = bos_token
+        self.eos_token = eos_token
+        self.pad_token = pad_token
+        self.sep_token = sep_token
+        self.cls_token = cls_token
+        self.mask_token = mask_token
 
-        self.max_length = max_length
-        self.padding = padding
-        self.return_overflowing_tokens = return_overflowing_tokens
-        self.stride = stride
-
-    @property
-    def unk_token_id(self):
-        return self._convert_token_to_id(self.unk_token)
-
-    @property
-    def eos_token_id(self):
-        return self._convert_token_to_id(self.eos_token)
-
-    @property
-    def pad_token_id(self):
-        return self._convert_token_to_id(self.pad_token)
+        self.unk_token_id = self._convert_token_to_id(unk_token) if unk_token else None
+        self.bos_token_id = self._convert_token_to_id(bos_token) if bos_token else None
+        self.eos_token_id = self._convert_token_to_id(eos_token) if eos_token else None
+        self.pad_token_id = self._convert_token_to_id(pad_token) if pad_token else None
+        self.sep_token_id = self._convert_token_to_id(sep_token) if sep_token else None
+        self.cls_token_id = self._convert_token_to_id(cls_token) if cls_token else None
+        self.mask_token_id = (
+            self._convert_token_to_id(mask_token) if mask_token else None
+        )
 
     def __call__(
         self,
@@ -71,6 +70,12 @@ class BaseTokenizer:
             "input_ids": input_ids,
         }
         return encoded
+
+    def get_vocab(self) -> dict[str, int]:
+        raise NotImplementedError("get_vocab() is not implemented")
+
+    def get_vocab_size(self) -> int:
+        raise NotImplementedError("get_vocab_size() is not implemented")
 
     def _tokenize(self, text: str) -> list[str]:
         raise NotImplementedError("_tokenize() method is not implemented")
@@ -175,9 +180,3 @@ class BaseTokenizer:
     def batch_decode(self, sequences: list[list[int] | torch.Tensor]) -> list[str]:
         decoded = [self.decode(seq) for seq in sequences]
         return decoded
-
-    def get_vocab(self) -> dict[str, int]:
-        return self.vocab
-
-    def get_vocab_size(self) -> int:
-        return len(self.vocab)
