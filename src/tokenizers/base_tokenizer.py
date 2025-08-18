@@ -56,7 +56,7 @@ class BaseTokenizer:
                 return_tensors=return_tensors,
                 return_overflowing_tokens=return_overflowing_tokens,
             )
-            if isinstance(ids[0], list):
+            if return_tensors is None and return_overflowing_tokens:
                 input_ids += ids
             else:
                 input_ids.append(ids)
