@@ -16,10 +16,12 @@ from .base_tokenizer import BaseTokenizer
 class TinyStoriesBpe8kTokenizer(BaseTokenizer):
     SAVE_FILE = "./data/tokenizers/tinystories-bpe-8k.json"
 
-    def __init__(self):
+    def __init__(self, add_eos_token: bool = True):
         UNK_TOKEN = "<unk>"
         EOS_TOKEN = "<eos>"
         PAD_TOKEN = "<pad>"
+
+        self.add_eos_token = add_eos_token
 
         if os.path.exists(TinyStoriesBpe8kTokenizer.SAVE_FILE):
             self._load(
@@ -108,7 +110,10 @@ class TinyStoriesBpe8kTokenizer(BaseTokenizer):
         return self.tokenizer.convert_tokens_to_string(tokens)
 
     def build_inputs_with_special_tokens(self, token_ids: list[int]) -> list[int]:
-        return token_ids + [self.eos_token_id]
+        if self.add_eos_token:
+            return token_ids + [self.eos_token_id]
+        else:
+            return token_ids
 
     def num_special_tokens_to_add(self):
-        return 1
+        return 1 if self.add_eos_token else 0
