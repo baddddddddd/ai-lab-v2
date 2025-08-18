@@ -43,6 +43,7 @@ class BaseTokenizer:
         max_length: int | None = None,
         return_tensors: str | None = None,
         return_overflowing_tokens: bool = False,
+        **kwargs,
     ) -> list[list[int] | torch.Tensor]:
         input_ids = []
         for text in texts:
@@ -54,6 +55,7 @@ class BaseTokenizer:
                 max_length=max_length,
                 return_tensors=return_tensors,
                 return_overflowing_tokens=return_overflowing_tokens,
+                **kwargs,
             )
             if return_tensors is None and return_overflowing_tokens:
                 input_ids += ids
@@ -77,7 +79,7 @@ class BaseTokenizer:
     def get_vocab_size(self) -> int:
         raise NotImplementedError("get_vocab_size() is not implemented")
 
-    def _tokenize(self, text: str) -> list[str]:
+    def _tokenize(self, text: str, **kwargs) -> list[str]:
         raise NotImplementedError("_tokenize() method is not implemented")
 
     def _convert_token_to_id(self, token: str) -> int:
@@ -101,8 +103,11 @@ class BaseTokenizer:
             "num_special_tokens_to_add() method is not implemented"
         )
 
-    def tokenize(self, text: str) -> list[str]:
-        return self._tokenize(text)
+    def prepare_for_tokenization(self, text, **kwargs):
+        return (text, kwargs)
+
+    def tokenize(self, text: str, **kwargs) -> list[str]:
+        return self._tokenize(text, **kwargs)
 
     def convert_tokens_to_ids(self, tokens: list[str]) -> list[int]:
         return [self._convert_token_to_id(tok) for tok in tokens]
@@ -123,8 +128,10 @@ class BaseTokenizer:
         max_length: int | None = None,
         return_tensors: str | None = None,
         return_overflowing_tokens: bool = False,
+        **kwargs,
     ) -> list[int] | list[list[int]] | torch.Tensor:
-        tokens = self.tokenize(text)
+        text, kwargs = self.prepare_for_tokenization(text, **kwargs)
+        tokens = self.tokenize(text, **kwargs)
         ids = self.convert_tokens_to_ids(tokens)
 
         if truncation:
