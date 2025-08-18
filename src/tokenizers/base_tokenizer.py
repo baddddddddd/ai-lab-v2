@@ -203,9 +203,12 @@ class BaseTokenizer:
 
         return self._decode(token_ids)
 
+    def _batch_decode(self, sequences: list[list[int]]) -> list[str]:
+        decoded = [self._decode(seq) for seq in sequences]
+        return decoded
+
     def batch_decode(self, sequences: list[list[int] | torch.Tensor]) -> list[str]:
         if isinstance(sequences, torch.Tensor):
             sequences = sequences.tolist()
 
-        decoded = [self._decode(seq) for seq in sequences]
-        return decoded
+        return self._batch_decode(sequences)
