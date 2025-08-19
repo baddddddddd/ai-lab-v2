@@ -23,5 +23,5 @@ torchinfo.summary(model)
 while True:
     prompt = input("\n>>> ")
 
-    input_ids = tokenizer.encode(prompt, return_tensors="pt")[0, :-1]
+    input_ids = tokenizer.encode(prompt, add_special_tokens=False, return_tensors="pt")
     output = model.generate(input_ids, streamer=streamer)
