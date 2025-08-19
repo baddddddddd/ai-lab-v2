@@ -19,6 +19,7 @@ class TrainingConfig:
         save_steps: int | None = None,
         eval_batch_size: int | None = None,
         eval_strategy: str | None = None,
+        logging_steps: int | None = None,
     ):
         self.output_dir = pathlib.Path(output_dir).resolve()
         self.num_train_epochs = num_train_epochs
@@ -34,3 +35,4 @@ class TrainingConfig:
         self.save_steps = save_steps
         self.eval_batch_size = eval_batch_size
         self.eval_strategy = eval_strategy
+        self.logging_steps = logging_steps if logging_steps else self.save_steps

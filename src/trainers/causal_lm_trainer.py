@@ -86,11 +86,11 @@ class CausalLmTrainer(BaseTrainer):
         scaler = torch.cuda.amp.GradScaler()
 
         self.model.train()
-        total_loss = 0.0
         for epoch in range(start_epoch, self.args.num_train_epochs):
             print(f"EPOCH {epoch + 1}")
             print(f"=" * 75)
 
+            total_loss = 0.0
             for batch_idx, (inputs, targets) in enumerate(self.dataloader):
                 if epoch <= start_epoch and batch_idx < start_batch_idx:
                     continue
@@ -118,13 +118,15 @@ class CausalLmTrainer(BaseTrainer):
 
                 total_loss += loss.item()
 
-                if (
-                    self.args.save_steps is not None
-                    and optimizer_steps % self.args.save_steps == 0
+                if self.args.save_steps and (
+                    optimizer_steps % self.args.save_steps == 0
                 ):
                     self.save_state(epoch, batch_idx, optimizer_steps)
 
-                    avg_loss = total_loss / self.args.save_steps
+                if self.args.logging_steps and (
+                    optimizer_steps % self.args.logging_steps == 0
+                ):
+                    avg_loss = total_loss / self.args.logging_steps
                     processed = (batch_idx + 1) * self.args.train_batch_size
                     batch_progress = f"[{processed:>{counter_width}d}/{dataset_size}]"
 
@@ -136,8 +138,8 @@ class CausalLmTrainer(BaseTrainer):
                     self.log(
                         batch_progress,
                         avg_loss=avg_loss_log,
-                        steps=optimizer_steps,
                         lr=lr_log,
+                        steps=optimizer_steps,
                     )
 
     def get_latest_checkpoint(self):
@@ -257,8 +259,7 @@ class CausalLmTrainer(BaseTrainer):
         self.save_scheduler(save_directory=save_folder)
         self.save_rng_state(save_directory=save_folder)
 
-        # scheduler.pt
-        # training_args.bin
+        print(f"[INFO] Saved {save_folder}")
 
     def log(self, *args, **kwargs):
         args_string = " ".join(args)
