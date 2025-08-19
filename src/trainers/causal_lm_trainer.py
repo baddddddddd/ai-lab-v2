@@ -163,6 +163,7 @@ class CausalLmTrainer(BaseTrainer):
     def resume_from_folder(self, checkpoint_folder: pathlib.Path):
         self.model = self.model.__class__.from_pretrained(checkpoint_folder)
         self.load_optimizer(checkpoint_folder)
+        self.load_scheduler(checkpoint_folder)
         self.load_rng_state(checkpoint_folder)
 
         trainer_state = self.load_trainer_state(checkpoint_folder)
@@ -201,6 +202,16 @@ class CausalLmTrainer(BaseTrainer):
         optimizer_state = self.optimizer.state_dict()
         optimizer_file = save_directory / CausalLmTrainer.OPTIMIZER_FILENAME
         torch.save(optimizer_state, optimizer_file)
+
+    def load_scheduler(self, checkpoint_folder: pathlib.Path):
+        scheduler_file = checkpoint_folder / CausalLmTrainer.SCHEDULER_FILENAME
+        scheduler_state = torch.load(scheduler_file)
+        self.scheduler.load_state_dict(scheduler_state)
+
+    def save_scheduler(self, save_directory: pathlib.Path):
+        scheduler_state = self.scheduler.state_dict()
+        scheduler_file = save_directory / CausalLmTrainer.SCHEDULER_FILENAME
+        torch.save(scheduler_state, scheduler_file)
 
     def load_rng_state(self, checkpoint_folder: pathlib.Path):
         trainer_state_file = checkpoint_folder / CausalLmTrainer.RNG_STATE_FILENAME
@@ -242,6 +253,7 @@ class CausalLmTrainer(BaseTrainer):
         self.model.save_pretrained(save_directory=save_folder)
         self.save_trainer_state(save_folder, epoch, batch_idx, optimizer_steps)
         self.save_optimizer(save_directory=save_folder)
+        self.save_scheduler(save_directory=save_folder)
         self.save_rng_state(save_directory=save_folder)
 
         # scheduler.pt
