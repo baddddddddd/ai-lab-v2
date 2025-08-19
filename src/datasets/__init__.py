@@ -1,2 +1,2 @@
-from .base_dataset import BaseDataset
-from .tiny_stories_dataset import TinyStoriesDataset
+from .base_dataset import BaseDataset, BaseStreamingDataset
+from .causal_lm_dataset import CausalLmDataset, CausalLmStreamingDataset
