@@ -29,7 +29,11 @@ class CausalLmDataset(BaseDataset):
         return len(self.dataset)
 
     def __getitem__(self, idx):
-        return self.dataset[idx]
+        ids = self.dataset[idx]["input_ids"]
+        return {
+            "input_ids": ids[:-1],
+            "labels": ids[1:],
+        }
 
 
 class CausalLmStreamingDataset(BaseStreamingDataset):
@@ -57,6 +61,12 @@ class CausalLmStreamingDataset(BaseStreamingDataset):
             )
             if return_overflowing_tokens:
                 for id_ in ids:
-                    yield {"input_ids": id_}
+                    yield {
+                        "input_ids": id_[:-1],
+                        "labels": id_[1:],
+                    }
             else:
-                yield {"input_ids": ids}
+                yield {
+                    "input_ids": ids[:-1],
+                    "labels": ids[1:],
+                }
