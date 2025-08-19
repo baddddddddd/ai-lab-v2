@@ -42,6 +42,7 @@ class CausalLmTrainer(BaseTrainer):
         self.dataloader = DataLoader(
             dataset=train_dataset,
             batch_size=args.train_batch_size,
+            drop_last=True,
             shuffle=True,
         )
         self.optimizer = optim.AdamW(
