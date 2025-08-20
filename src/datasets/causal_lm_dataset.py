@@ -1,6 +1,7 @@
 import multiprocessing
 from pathlib import Path
 
+import spacy
 import torch
 from torch.utils.data import DataLoader
 from datasets import Dataset as HFDataset, IterableDataset as HFIterableDataset
@@ -74,10 +75,18 @@ class CausalLmDataset(BaseDataset):
         separator: str = "\n\n",
         encoding: str = "utf-8",
         chunk_size: int = 1000,
-        for_sentencepiece: bool = False,
+        split_by_newline: bool = False,
+        split_by_sentence: bool = False,
+        spacy_model: str = "en_core_web_sm",
     ):
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if split_by_sentence:
+            nlp = spacy.load(
+                spacy_model, disable=["tagger", "parser", "ner", "lemmatizer"]
+            )
+            nlp.add_pipe("sentencizer")
 
         with open(output_path, "w", encoding=encoding) as f:
             total_examples = len(self.raw_dataset)
@@ -94,7 +103,15 @@ class CausalLmDataset(BaseDataset):
                     texts = [chunk[self.text_column]]
 
                 for text in texts:
-                    if for_sentencepiece:
+                    if split_by_sentence:
+                        doc = nlp(text)
+                        sentences = [
+                            sent.text.strip() for sent in doc.sents if sent.text.strip()
+                        ]
+                        for sentence in sentences:
+                            f.write(sentence + "\n")
+                            total_written += 1
+                    elif split_by_newline:
                         lines = (
                             text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
                         )
@@ -115,8 +132,6 @@ class CausalLmDataset(BaseDataset):
         print(f"Corpus dumped to {output_path}")
         print(f"Total examples/lines: {total_written}")
         print(f"File size: {output_path.stat().st_size / (1024*1024):.2f} MB")
-        if for_sentencepiece:
-            print("Formatted for SentencePiece training (one sentence per line)")
 
 
 class CausalLmStreamingDataset(BaseDataset):
@@ -186,10 +201,18 @@ class CausalLmStreamingDataset(BaseDataset):
         separator: str = "\n\n",
         encoding: str = "utf-8",
         max_examples: int | None = None,
-        for_sentencepiece: bool = False,
+        split_by_newline: bool = False,
+        split_by_sentence: bool = False,
+        spacy_model: str = "en_core_web_sm",
     ):
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if split_by_sentence:
+            nlp = spacy.load(
+                spacy_model, disable=["tagger", "parser", "ner", "lemmatizer"]
+            )
+            nlp.add_pipe("sentencizer")
 
         with open(output_path, "w", encoding=encoding) as f:
             count = 0
@@ -201,7 +224,15 @@ class CausalLmStreamingDataset(BaseDataset):
 
                 text = example[self.text_column]
 
-                if for_sentencepiece:
+                if split_by_sentence:
+                    doc = nlp(text)
+                    sentences = [
+                        sent.text.strip() for sent in doc.sents if sent.text.strip()
+                    ]
+                    for sentence in sentences:
+                        f.write(sentence + "\n")
+                        total_written += 1
+                elif split_by_newline:
                     lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
                     for line in lines:
                         line = line.strip()
@@ -220,5 +251,3 @@ class CausalLmStreamingDataset(BaseDataset):
         print(f"Corpus dumped to {output_path}")
         print(f"Total examples/lines: {total_written}")
         print(f"File size: {output_path.stat().st_size / (1024*1024):.2f} MB")
-        if for_sentencepiece:
-            print("✓ Formatted for SentencePiece training (one sentence per line)")
