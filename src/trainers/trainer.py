@@ -3,6 +3,7 @@ import os
 import pathlib
 import random
 import re
+from typing import Any
 
 import numpy as np
 import torch
@@ -59,8 +60,8 @@ class Trainer:
         os.makedirs(self.args.output_dir, exist_ok=True)
 
     def _prepare_inputs(
-        self, inputs: dict[str, torch.Tensor | any]
-    ) -> dict[str, torch.Tensor | any]:
+        self, inputs: dict[str, torch.Tensor | Any]
+    ) -> dict[str, torch.Tensor | Any]:
         inputs = {
             k: v.to(self.device) if isinstance(v, torch.Tensor) else v
             for k, v in inputs.items()
