@@ -3,6 +3,8 @@ import torch
 
 from ...tokenizers import BaseTokenizer
 
+SPIECE_UNDERLINE = "▁"
+
 
 class LlamaTokenizer(BaseTokenizer):
     def __init__(
@@ -25,6 +27,9 @@ class LlamaTokenizer(BaseTokenizer):
             for id_ in range(self.tokenizer.get_piece_size())
         }
 
+        self.special_tokens = set(
+            [tok for tok in [unk_token, bos_token, eos_token] if tok is not None]
+        )
         super().__init__(
             unk_token=unk_token,
             bos_token=bos_token,
@@ -73,9 +78,7 @@ class LlamaTokenizer(BaseTokenizer):
         return len(self.vocab)
 
     def _tokenize(self, text: str) -> list[str]:
-        return self.tokenizer.encode_as_pieces(
-            text, add_bos=self.add_bos_token, add_eos=self.add_eos_token
-        )
+        return self.tokenizer.encode_as_pieces(text)
 
     def _convert_token_to_id(self, token: str) -> int:
         return self.tokenizer.piece_to_id(token)
@@ -84,7 +87,21 @@ class LlamaTokenizer(BaseTokenizer):
         return self.tokenizer.id_to_piece(token_id)
 
     def _convert_tokens_to_string(self, tokens: list[str]) -> str:
-        return self.tokenizer.decode(tokens)
+        out = ""
+
+        sub_tokens = []
+        for tok in tokens:
+            if tok in self.special_tokens:
+                out += self.tokenizer.decode(sub_tokens) + tok
+                sub_tokens.clear()
+            else:
+                if not sub_tokens and tok.startswith(SPIECE_UNDERLINE):
+                    out += " "
+
+                sub_tokens.append(tok)
+
+        out += self.tokenizer.decode(sub_tokens)
+        return out
 
     def build_inputs_with_special_tokens(self, token_ids: list[int]) -> list[int]:
         return token_ids
@@ -96,9 +113,3 @@ class LlamaTokenizer(BaseTokenizer):
         return self.tokenizer.encode_as_ids(
             text, add_bos=self.add_bos_token, add_eos=self.add_eos_token
         )
-
-    def _decode(self, token_ids: list[int]) -> str:
-        return self.tokenizer.decode(token_ids)
-
-    def _batch_decode(self, sequences: list[list[int]]) -> list[str]:
-        return self.tokenizer.decode(sequences)
