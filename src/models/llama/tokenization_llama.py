@@ -62,7 +62,7 @@ class LlamaTokenizer(BaseTokenizer):
             unk_surface=" \uFFF7 ",
             normalization_rule_name="identity",
         )
-        print(f"Saved trained tokenizer in {corpus_file}")
+        print(f"Finished training LLaMa Tokenizer")
 
     def get_vocab(self) -> dict[str, int]:
         return self.vocab
