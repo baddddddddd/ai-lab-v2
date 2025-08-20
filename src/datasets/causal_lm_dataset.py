@@ -108,7 +108,7 @@ class CausalLmStreamingDataset(BaseStreamingDataset):
 
             for example in examples:
                 example_ids = torch.LongTensor(example["input_ids"])
-                example_labels = torch.LongTensor(example["labels"])
+                example_labels = torch.LongTensor(example["labels"]).clone()
                 if self.tokenizer.pad_token_id:
                     example_labels[example_labels == self.tokenizer.pad_token_id] = -100
 
