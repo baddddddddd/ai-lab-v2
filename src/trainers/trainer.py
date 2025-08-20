@@ -13,12 +13,11 @@ from torch.utils.data import DataLoader, Dataset
 from ..datasets import BaseDataset
 from ..models import BaseModel
 from ..tokenizers import BaseTokenizer
-from .base_trainer import BaseTrainer
 from .training_config import TrainingConfig
 from .schedulers import LinearWarmupCosineAnnealingLR
 
 
-class CausalLmTrainer(BaseTrainer):
+class Trainer:
     TRAINER_STATE_FILENAME = "trainer_state.json"
     TRAINING_ARGS_FILENAME = "training_args.bin"
     OPTIMIZER_FILENAME = "optimizer.pt"
@@ -39,12 +38,7 @@ class CausalLmTrainer(BaseTrainer):
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
 
-        self.dataloader = DataLoader(
-            dataset=train_dataset,
-            batch_size=args.train_batch_size,
-            drop_last=True,
-            shuffle=True,
-        )
+        self.dataloader = train_dataset.get_dataloader(batch_size=args.train_batch_size)
         self.optimizer = optim.AdamW(
             model.parameters(),
             lr=args.learning_rate,
@@ -53,10 +47,6 @@ class CausalLmTrainer(BaseTrainer):
         )
         self.scheduler = LinearWarmupCosineAnnealingLR(
             self.optimizer, args.warmup_steps, args.total_steps, args.min_lr
-        )
-        self.criterion = nn.CrossEntropyLoss(
-            ignore_index=self.tokenizer.pad_token_id,
-            label_smoothing=args.label_smoothing,
         )
 
         self.device = (
@@ -67,6 +57,16 @@ class CausalLmTrainer(BaseTrainer):
         self.model.to(self.device)
 
         os.makedirs(self.args.output_dir, exist_ok=True)
+
+    def _prepare_inputs(
+        self, inputs: dict[str, torch.Tensor | any]
+    ) -> dict[str, torch.Tensor | any]:
+        inputs = {
+            k: v.to(self.device) if isinstance(v, torch.Tensor) else v
+            for k, v in inputs.items()
+        }
+
+        return inputs
 
     def train(self, resume_from_checkpoint: os.PathLike[str] | bool = False):
         if resume_from_checkpoint:
@@ -91,31 +91,27 @@ class CausalLmTrainer(BaseTrainer):
             print(f"=" * 75)
 
             total_loss = 0.0
-            for batch_idx, (inputs, targets) in enumerate(self.dataloader):
+            for batch_idx, inputs in enumerate(self.dataloader):
                 if epoch <= start_epoch and batch_idx < start_batch_idx:
                     continue
 
-                inputs = inputs.to(self.device)
-                targets = targets.to(self.device)
-
-                self.optimizer.zero_grad()
+                inputs = self._prepare_inputs(inputs)
 
                 with torch.cuda.amp.autocast():
-                    logits = self.model(inputs)
-
-                    logits = logits.view(-1, logits.size(-1))
-                    targets = targets.view(-1)
-
-                    loss = self.criterion(logits, targets)
+                    output = self.model(**inputs)
+                    loss = output.loss
 
                 scaler.scale(loss).backward()
 
+                scaler.unscale_(self.optimizer)
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
 
-                self.optimizer.step()
+                scaler.step(self.optimizer)
+                scaler.update()
+                self.optimizer.zero_grad(set_to_none=True)
                 self.scheduler.step()
-                optimizer_steps += 1
 
+                optimizer_steps += 1
                 total_loss += loss.item()
 
                 if self.args.save_steps and (
