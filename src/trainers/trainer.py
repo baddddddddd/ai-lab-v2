@@ -84,7 +84,7 @@ class Trainer:
         dataset_size = len(self.train_dataset)
         counter_width = len(str(dataset_size))
 
-        scaler = torch.amp.GradScaler()
+        scaler = torch.amp.GradScaler(device="cuda")
 
         self.model.train()
         for epoch in range(start_epoch, self.args.num_train_epochs):
@@ -98,7 +98,7 @@ class Trainer:
 
                 inputs = self._prepare_inputs(inputs)
 
-                with torch.amp.autocast():
+                with torch.amp.autocast(device_type="cuda"):
                     output = self.model(**inputs)
                     loss = output.loss
 
