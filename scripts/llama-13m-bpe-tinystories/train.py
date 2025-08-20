@@ -1,20 +1,17 @@
 import torchinfo
+from datasets import load_dataset
 
-from src.datasets import TinyStoriesDataset
+from src.datasets import CausalLmDataset
 from src.models.llama import LlamaConfig, LlamaModel
 from src.tokenizers import TinyStoriesBpe8kTokenizer
-from src.trainers import CausalLmTrainer, TrainingConfig
+from src.trainers import Trainer, TrainingConfig
 
 
 SEQ_LEN = 256
 D_MODEL = 384
 N_LAYERS = 6
 
-tokenizer = TinyStoriesBpe8kTokenizer(
-    max_length=SEQ_LEN,
-    padding=True,
-    return_overflowing_tokens=True,
-)
+tokenizer = TinyStoriesBpe8kTokenizer()
 
 model_config = LlamaConfig(
     vocab_size=tokenizer.get_vocab_size(),
@@ -34,18 +31,38 @@ training_config = TrainingConfig(
     warmup_steps=500,
     total_steps=25000,
     betas=(0.9, 0.95),
-    weight_decay=0.01,
-    label_smoothing=0.0,
+    weight_decay=0.1,
     train_batch_size=128,
     save_steps=100,
+    logging_steps=10,
 )
 
 model = LlamaModel(model_config)
 torchinfo.summary(model)
 
-dataset = TinyStoriesDataset(split="train", tokenizer=tokenizer)
+raw_dataset = load_dataset("roneneldan/TinyStories", split="train[:1]")
 
-trainer = CausalLmTrainer(
+
+def tok_prep(text: str, **kwargs):
+    text += tokenizer.eos_token
+    return (text, kwargs)
+
+
+tokenizer.prepare_for_tokenization = tok_prep
+
+dataset = CausalLmDataset(
+    raw_dataset,
+    tokenizer,
+    text_column="text",
+    add_special_tokens=False,
+    padding=True,
+    truncation=True,
+    max_length=SEQ_LEN + 1,
+    stride=1,
+    return_overflowing_tokens=True,
+)
+
+trainer = Trainer(
     model=model,
     tokenizer=tokenizer,
     args=training_config,
