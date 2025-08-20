@@ -4,6 +4,7 @@ import torch.nn.functional as F
 
 from ...utils import BaseStreamer, top_p_sample
 from ..base_model import BaseModel
+from ..model_output import CausalLmOutput
 from .configuration_llama import LlamaConfig
 
 
@@ -124,6 +125,10 @@ class LlamaModel(BaseModel):
 
         self.apply(self._init_weights)
 
+        self.loss_func = nn.CrossEntropyLoss(
+            ignore_index=-100,
+        )
+
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=0.02)
@@ -132,7 +137,9 @@ class LlamaModel(BaseModel):
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=0.02)
 
-    def forward(self, input_ids: torch.Tensor):
+    def forward(
+        self, input_ids: torch.Tensor, labels: torch.Tensor | None = None
+    ) -> CausalLmOutput:
         seq_len = input_ids.size(1)
 
         token_embeds = self.token_embedding(input_ids)
@@ -148,7 +155,18 @@ class LlamaModel(BaseModel):
         hidden_state = self.final_norm(hidden_state)
 
         logits = hidden_state @ self.token_embedding.weight.T
-        return logits
+
+        loss = None
+        if labels is not None:
+            x = logits.view(-1, logits.size(-1))
+            y = labels.view(-1)
+
+            loss = self.loss_func(x, y)
+
+        return CausalLmOutput(
+            logits=logits,
+            loss=loss,
+        )
 
     @torch.no_grad()
     def generate(
@@ -169,7 +187,7 @@ class LlamaModel(BaseModel):
             model_input = torch.tensor(
                 [generated], dtype=torch.long, device=input_ids.device
             )
-            logits = self.forward(model_input)
+            logits = self.forward(model_input).logits
             logits = logits[0, -1]
 
             if temperature > 0.0:
