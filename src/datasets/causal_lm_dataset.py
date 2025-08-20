@@ -20,6 +20,7 @@ class CausalLmDataset(BaseDataset):
             tokens = tokenizer(examples[text_column], **tokenizer_kwargs)
             return tokens
 
+        self.tokenizer = tokenizer
         self.dataset = dataset.map(
             tokenize,
             remove_columns=text_column,
@@ -43,8 +44,13 @@ class CausalLmDataset(BaseDataset):
             labels = []
 
             for example in examples:
-                input_ids.append(torch.LongTensor(example["input_ids"]))
-                labels.append(torch.LongTensor(example["labels"]))
+                example_ids = torch.LongTensor(example["input_ids"])
+                example_labels = torch.LongTensor(example["labels"])
+                if self.tokenizer.pad_token_id:
+                    example_labels[example_labels == self.tokenizer.pad_token_id] = -100
+
+                input_ids.append(example_ids)
+                labels.append(example_labels)
 
             return {
                 "input_ids": torch.stack(input_ids),
@@ -101,8 +107,13 @@ class CausalLmStreamingDataset(BaseStreamingDataset):
             labels = []
 
             for example in examples:
-                input_ids.append(torch.LongTensor(example["input_ids"]))
-                labels.append(torch.LongTensor(example["labels"]))
+                example_ids = torch.LongTensor(example["input_ids"])
+                example_labels = torch.LongTensor(example["labels"])
+                if self.tokenizer.pad_token_id:
+                    example_labels[example_labels == self.tokenizer.pad_token_id] = -100
+
+                input_ids.append(example_ids)
+                labels.append(example_labels)
 
             return {
                 "input_ids": torch.stack(input_ids),
