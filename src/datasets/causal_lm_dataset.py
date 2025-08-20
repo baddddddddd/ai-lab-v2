@@ -81,6 +81,7 @@ class CausalLmDataset(BaseDataset):
 
         with open(output_path, "w", encoding=encoding) as f:
             total_examples = len(self.raw_dataset)
+            log_interval = chunk_size * 10
             total_written = 0
 
             for i in range(0, total_examples, chunk_size):
@@ -107,6 +108,9 @@ class CausalLmDataset(BaseDataset):
                         total_written += 1
                         if total_written < total_examples:
                             f.write(separator)
+
+                if i % log_interval == 0:
+                    print(f"Processed {i} examples...")
 
         print(f"Corpus dumped to {output_path}")
         print(f"Total examples/lines: {total_written}")
