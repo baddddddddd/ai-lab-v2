@@ -37,6 +37,7 @@ class LlamaTokenizer(BaseTokenizer):
         model_prefix: str = "tokenizer",
         vocab_size: str = 32000,
         character_coverage: float = 0.99995,
+        add_dummy_prefix: bool = False,
         unk_token: str = "<unk>",
         bos_token: str = "<s>",
         eos_token: str = "</s>",
@@ -61,6 +62,7 @@ class LlamaTokenizer(BaseTokenizer):
             byte_fallback=True,
             unk_surface=" \uFFF7 ",
             normalization_rule_name="identity",
+            add_dummy_prefix=add_dummy_prefix,
         )
         print(f"Finished training LLaMa Tokenizer")
 
