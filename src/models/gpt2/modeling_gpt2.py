@@ -6,6 +6,7 @@ import torch.nn.functional as F
 
 from ...utils import BaseStreamer, top_p_sample
 from ..base_model import BaseModel
+from ..model_output import CausalLmOutput
 from .configuration_gpt2 import GPT2Config
 
 
@@ -144,6 +145,8 @@ class GPT2Model(BaseModel):
         self.apply(self._init_weights)
         self._scale_residual_weights()
 
+        self.loss_func = nn.CrossEntropyLoss(ignore_index=-100)
+
     def _init_weights(self, module):
         if isinstance(module, (nn.Linear, nn.Embedding)):
             nn.init.normal_(module.weight, mean=0.0, std=0.02)
@@ -156,7 +159,9 @@ class GPT2Model(BaseModel):
             block.attn.out_proj.weight.data *= scale
             block.ff.ff[2].weight.data *= scale
 
-    def forward(self, input_ids: torch.Tensor):
+    def forward(
+        self, input_ids: torch.Tensor, labels: torch.Tensor | None = None
+    ) -> CausalLmOutput:
         hidden = self.embedding(input_ids)
 
         for block in self.transformer_stack:
@@ -165,7 +170,18 @@ class GPT2Model(BaseModel):
         hidden = self.final_norm(hidden)
 
         logits = hidden @ self.embedding.token_embedding.weight.T
-        return logits
+
+        loss = None
+        if labels is not None:
+            x = logits.view(-1, logits.size(-1))
+            y = labels.view(-1)
+
+            loss = self.loss_func(x, y)
+
+        return CausalLmOutput(
+            logits=logits,
+            loss=loss,
+        )
 
     @torch.no_grad()
     def generate(
@@ -186,7 +202,7 @@ class GPT2Model(BaseModel):
             model_input = torch.tensor(
                 [generated], dtype=torch.long, device=input_ids.device
             )
-            logits = self.forward(model_input)
+            logits = self.forward(model_input).logits
             logits = logits[0, -1]
 
             if temperature > 0.0:

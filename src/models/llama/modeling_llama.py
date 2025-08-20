@@ -125,9 +125,7 @@ class LlamaModel(BaseModel):
 
         self.apply(self._init_weights)
 
-        self.loss_func = nn.CrossEntropyLoss(
-            ignore_index=-100,
-        )
+        self.loss_func = nn.CrossEntropyLoss(ignore_index=-100)
 
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
