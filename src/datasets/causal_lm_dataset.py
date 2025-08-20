@@ -1,5 +1,7 @@
 import multiprocessing
 
+import torch
+from torch.utils.data import DataLoader
 from datasets import Dataset as HFDataset, IterableDataset as HFIterableDataset
 
 from ..tokenizers import BaseTokenizer
@@ -34,6 +36,28 @@ class CausalLmDataset(BaseDataset):
             "input_ids": ids[:-1],
             "labels": ids[1:],
         }
+
+    def get_dataloader(self, batch_size: int, shuffle: bool = False):
+        def collate_fn(examples):
+            input_ids = []
+            labels = []
+
+            for example in examples:
+                input_ids.append(torch.LongTensor(example["input_ids"]))
+                labels.append(torch.LongTensor(example["labels"]))
+
+            return {
+                "input_ids": torch.stack(input_ids),
+                "labels": torch.stack(labels),
+            }
+
+        return DataLoader(
+            self,
+            batch_size=batch_size,
+            collate_fn=collate_fn,
+            shuffle=shuffle,
+            drop_last=True,
+        )
 
 
 class CausalLmStreamingDataset(BaseStreamingDataset):
@@ -70,3 +94,24 @@ class CausalLmStreamingDataset(BaseStreamingDataset):
                     "input_ids": ids[:-1],
                     "labels": ids[1:],
                 }
+
+    def get_dataloader(self, batch_size: int):
+        def collate_fn(examples):
+            input_ids = []
+            labels = []
+
+            for example in examples:
+                input_ids.append(torch.LongTensor(example["input_ids"]))
+                labels.append(torch.LongTensor(example["labels"]))
+
+            return {
+                "input_ids": torch.stack(input_ids),
+                "labels": torch.stack(labels),
+            }
+
+        return DataLoader(
+            self,
+            batch_size=batch_size,
+            collate_fn=collate_fn,
+            drop_last=True,
+        )
