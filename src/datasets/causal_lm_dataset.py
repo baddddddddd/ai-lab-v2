@@ -75,6 +75,7 @@ class CausalLmDataset(BaseDataset):
         separator: str = "\n\n",
         encoding: str = "utf-8",
         chunk_size: int = 1000,
+        add_space_prefix: bool = False,
         split_by_newline: bool = False,
         split_by_sentence: bool = False,
         spacy_model: str = "en_core_web_sm",
@@ -109,6 +110,9 @@ class CausalLmDataset(BaseDataset):
                             sent.text.strip() for sent in doc.sents if sent.text.strip()
                         ]
                         for sentence in sentences:
+                            if add_space_prefix:
+                                sentence = " " + sentence
+
                             f.write(sentence + "\n")
                             total_written += 1
                     elif split_by_newline:
@@ -118,9 +122,15 @@ class CausalLmDataset(BaseDataset):
                         for line in lines:
                             line = line.strip()
                             if line:
+                                if add_space_prefix:
+                                    line = " " + line
+
                                 f.write(line + "\n")
                                 total_written += 1
                     else:
+                        if add_space_prefix:
+                            text = " " + text
+
                         f.write(text)
                         total_written += 1
                         if total_written < total_examples:
@@ -201,6 +211,7 @@ class CausalLmStreamingDataset(BaseDataset):
         separator: str = "\n\n",
         encoding: str = "utf-8",
         max_examples: int | None = None,
+        add_space_prefix: bool = False,
         split_by_newline: bool = False,
         split_by_sentence: bool = False,
         spacy_model: str = "en_core_web_sm",
@@ -230,6 +241,9 @@ class CausalLmStreamingDataset(BaseDataset):
                         sent.text.strip() for sent in doc.sents if sent.text.strip()
                     ]
                     for sentence in sentences:
+                        if add_space_prefix:
+                            sentence = " " + sentence
+
                         f.write(sentence + "\n")
                         total_written += 1
                 elif split_by_newline:
@@ -237,9 +251,15 @@ class CausalLmStreamingDataset(BaseDataset):
                     for line in lines:
                         line = line.strip()
                         if line:
+                            if add_space_prefix:
+                                line = " " + line
+
                             f.write(line + "\n")
                             total_written += 1
                 else:
+                    if add_space_prefix:
+                        text = " " + text
+
                     f.write(text)
                     f.write(separator)
                     total_written += 1
