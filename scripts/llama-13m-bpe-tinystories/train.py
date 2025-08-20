@@ -40,7 +40,7 @@ training_config = TrainingConfig(
 model = LlamaModel(model_config)
 torchinfo.summary(model)
 
-raw_dataset = load_dataset("roneneldan/TinyStories", split="train[:1]")
+raw_dataset = load_dataset("roneneldan/TinyStories", split="train[:200000]")
 
 
 def tok_prep(text: str, **kwargs):
