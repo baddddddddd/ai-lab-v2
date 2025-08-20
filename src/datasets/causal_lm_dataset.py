@@ -214,7 +214,7 @@ class CausalLmStreamingDataset(BaseDataset):
                     total_written += 1
 
                 count += 1
-                if count % 1000 == 0:
+                if count % 10000 == 0:
                     print(f"Processed {count} examples...")
 
         print(f"Corpus dumped to {output_path}")
