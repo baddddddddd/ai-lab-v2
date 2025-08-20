@@ -71,7 +71,9 @@ class LlamaTokenizer(BaseTokenizer):
         return len(self.vocab)
 
     def _tokenize(self, text: str) -> list[str]:
-        return self.tokenizer.encode(text, out_type=str)
+        return self.tokenizer.encode_as_pieces(
+            text, add_bos=self.add_bos_token, add_eos=self.add_eos_token
+        )
 
     def _convert_token_to_id(self, token: str) -> int:
         return self.tokenizer.piece_to_id(token)
@@ -83,16 +85,15 @@ class LlamaTokenizer(BaseTokenizer):
         return self.tokenizer.decode(tokens)
 
     def build_inputs_with_special_tokens(self, token_ids: list[int]) -> list[int]:
-        bos_token_id = [self.bos_token_id] if self.add_bos_token else []
-        eos_token_id = [self.eos_token_id] if self.add_eos_token else []
-
-        return bos_token_id + token_ids + eos_token_id
+        return token_ids
 
     def num_special_tokens_to_add(self):
-        return int(self.add_bos_token) + int(self.add_eos_token)
+        return 0
 
     def _encode(self, text: str, **kwargs) -> list[int]:
-        return self.tokenizer.encode(text)
+        return self.tokenizer.encode_as_ids(
+            text, add_bos=self.add_bos_token, add_eos=self.add_eos_token
+        )
 
     def _decode(self, token_ids: list[int]) -> str:
         return self.tokenizer.decode(token_ids)
