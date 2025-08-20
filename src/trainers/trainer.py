@@ -173,7 +173,7 @@ class Trainer:
         return start_epoch, start_batch_idx, optimizer_steps
 
     def load_trainer_state(self, checkpoint_folder: pathlib.Path) -> dict:
-        json_file = checkpoint_folder / CausalLmTrainer.TRAINER_STATE_FILENAME
+        json_file = checkpoint_folder / Trainer.TRAINER_STATE_FILENAME
         with open(json_file, "r") as f:
             json_string = f.read()
             state_dict = json.loads(json_string)
@@ -188,33 +188,33 @@ class Trainer:
         }
 
         json_string = json.dumps(state_dict)
-        save_path = save_directory / CausalLmTrainer.TRAINER_STATE_FILENAME
+        save_path = save_directory / Trainer.TRAINER_STATE_FILENAME
 
         with open(save_path, "w") as f:
             f.write(json_string)
 
     def load_optimizer(self, checkpoint_folder: pathlib.Path):
-        optimizer_file = checkpoint_folder / CausalLmTrainer.OPTIMIZER_FILENAME
+        optimizer_file = checkpoint_folder / Trainer.OPTIMIZER_FILENAME
         optimizer_state = torch.load(optimizer_file)
         self.optimizer.load_state_dict(optimizer_state)
 
     def save_optimizer(self, save_directory: pathlib.Path):
         optimizer_state = self.optimizer.state_dict()
-        optimizer_file = save_directory / CausalLmTrainer.OPTIMIZER_FILENAME
+        optimizer_file = save_directory / Trainer.OPTIMIZER_FILENAME
         torch.save(optimizer_state, optimizer_file)
 
     def load_scheduler(self, checkpoint_folder: pathlib.Path):
-        scheduler_file = checkpoint_folder / CausalLmTrainer.SCHEDULER_FILENAME
+        scheduler_file = checkpoint_folder / Trainer.SCHEDULER_FILENAME
         scheduler_state = torch.load(scheduler_file)
         self.scheduler.load_state_dict(scheduler_state)
 
     def save_scheduler(self, save_directory: pathlib.Path):
         scheduler_state = self.scheduler.state_dict()
-        scheduler_file = save_directory / CausalLmTrainer.SCHEDULER_FILENAME
+        scheduler_file = save_directory / Trainer.SCHEDULER_FILENAME
         torch.save(scheduler_state, scheduler_file)
 
     def load_rng_state(self, checkpoint_folder: pathlib.Path):
-        trainer_state_file = checkpoint_folder / CausalLmTrainer.RNG_STATE_FILENAME
+        trainer_state_file = checkpoint_folder / Trainer.RNG_STATE_FILENAME
         trainer_state = torch.load(trainer_state_file, weights_only=False)
 
         torch.set_rng_state(trainer_state["torch_rng_state"])
@@ -240,7 +240,7 @@ class Trainer:
             ),
         }
 
-        save_path = save_directory / CausalLmTrainer.RNG_STATE_FILENAME
+        save_path = save_directory / Trainer.RNG_STATE_FILENAME
         torch.save(rng_state, save_path)
 
     def save_state(self, epoch, batch_idx, optimizer_steps):
