@@ -25,3 +25,4 @@ class ModelOutput(dict):
 class CausalLmOutput(ModelOutput):
     logits: torch.FloatTensor | None = None
     loss: torch.FloatTensor | None = None
+    past_key_values: torch.FloatTensor | None = None
