@@ -78,8 +78,9 @@ class BaseTokenizer:
     def get_vocab(self) -> dict[str, int]:
         raise NotImplementedError("get_vocab() is not implemented")
 
-    def get_vocab_size(self) -> int:
-        raise NotImplementedError("get_vocab_size() is not implemented")
+    @property
+    def vocab_size(self) -> int:
+        raise NotImplementedError("vocab_size is not implemented")
 
     def _tokenize(self, text: str, **kwargs) -> list[str]:
         raise NotImplementedError("_tokenize() method is not implemented")

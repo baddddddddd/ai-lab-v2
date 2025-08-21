@@ -94,7 +94,8 @@ class TinyStoriesBpe8kTokenizer(BaseTokenizer):
     def get_vocab(self) -> dict[str, int]:
         return self.vocab
 
-    def get_vocab_size(self) -> int:
+    @property
+    def vocab_size(self) -> int:
         return len(self.vocab)
 
     def _tokenize(self, text: str, **kwargs) -> list[str]:

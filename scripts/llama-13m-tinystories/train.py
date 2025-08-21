@@ -18,7 +18,7 @@ tokenizer = LlamaTokenizer(
 
 
 model_config = LlamaConfig(
-    vocab_size=tokenizer.get_vocab_size(),
+    vocab_size=tokenizer.vocab_size,
     n_ctx=SEQ_LEN,
     d_model=D_MODEL,
     n_layers=N_LAYERS,

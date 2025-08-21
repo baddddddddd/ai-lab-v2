@@ -17,7 +17,7 @@ tokenizer = TinyStoriesBpe8kTokenizer(
 )
 
 model_config = GPT2Config(
-    vocab_size=tokenizer.get_vocab_size(),
+    vocab_size=tokenizer.vocab_size,
     n_ctx=SEQ_LEN,
     n_layers=N_LAYERS,
     d_model=D_MODEL,

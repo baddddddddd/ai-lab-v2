@@ -74,7 +74,8 @@ class LlamaTokenizer(BaseTokenizer):
     def get_vocab(self) -> dict[str, int]:
         return self.vocab
 
-    def get_vocab_size(self) -> int:
+    @property
+    def vocab_size(self) -> int:
         return len(self.vocab)
 
     def _tokenize(self, text: str) -> list[str]:
