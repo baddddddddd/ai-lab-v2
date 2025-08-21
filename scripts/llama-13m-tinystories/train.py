@@ -46,8 +46,6 @@ torchinfo.summary(model)
 
 raw_dataset = load_dataset("roneneldan/TinyStories", split="train[:500000]")
 
-tokenizer.pad_token_id = tokenizer.eos_token_id
-
 dataset = CausalLmDataset(
     raw_dataset,
     tokenizer,
