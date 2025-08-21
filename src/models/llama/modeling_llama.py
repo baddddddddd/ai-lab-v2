@@ -28,6 +28,9 @@ def apply_rope(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor):
 
 class LlamaKVCache:
     def __init__(self, config: LlamaConfig, device: torch.device, batch_size: int = 1):
+        self.max_length = config.n_ctx
+        self.cache_ptr = [0] * config.n_layers
+
         self.k_cache = torch.zeros(
             config.n_layers,
             batch_size,
@@ -50,19 +53,17 @@ class LlamaKVCache:
         k_new: torch.Tensor,
         v_new: torch.Tensor,
         layer_idx: int,
-        cache_position: int,
     ):
         seq_len = k_new.size(2)
-        self.k_cache[layer_idx, :, :, cache_position : cache_position + seq_len, :] = (
-            k_new
-        )
-        self.v_cache[layer_idx, :, :, cache_position : cache_position + seq_len, :] = (
-            v_new
-        )
+        cache_ptr = self.cache_ptr[layer_idx]
+        self.k_cache[layer_idx, :, :, cache_ptr : cache_ptr + seq_len, :] = k_new
+        self.v_cache[layer_idx, :, :, cache_ptr : cache_ptr + seq_len, :] = v_new
+
+        self.cache_ptr[layer_idx] += 1
 
         return (
-            self.k_cache[layer_idx, :, :, : cache_position + seq_len, :],
-            self.v_cache[layer_idx, :, :, : cache_position + seq_len, :],
+            self.k_cache[layer_idx, :, :, : cache_ptr + seq_len, :],
+            self.v_cache[layer_idx, :, :, : cache_ptr + seq_len, :],
         )
 
 
@@ -87,7 +88,6 @@ class LlamaAttention(nn.Module):
         x: torch.Tensor,
         position_embeddings: torch.Tensor,
         past_key_values: LlamaKVCache | None = None,
-        cache_position: int = 0,
     ):
         # (batch_size, seq_len, d_model)
         batch_size, seq_len, _ = x.size()
@@ -102,7 +102,7 @@ class LlamaAttention(nn.Module):
         k = apply_rope(k, cos, sin)
 
         if past_key_values is not None:
-            k, v = past_key_values.update(k, v, self.layer_idx, cache_position)
+            k, v = past_key_values.update(k, v, self.layer_idx)
 
         values = F.scaled_dot_product_attention(q, k, v, is_causal=seq_len > 1)
         values = (
@@ -147,13 +147,11 @@ class LlamaBlock(nn.Module):
         x: torch.Tensor,
         position_embeddings: torch.Tensor,
         past_key_values: LlamaKVCache | None = None,
-        cache_position: int = 0,
     ):
         attn_output = self.attn(
             self.attn_norm(x),
             position_embeddings=position_embeddings,
             past_key_values=past_key_values,
-            cache_position=cache_position,
         )
         x = x + attn_output
 
@@ -204,7 +202,7 @@ class LlamaModel(BaseModel):
         input_ids: torch.Tensor,
         labels: torch.Tensor | None = None,
         past_key_values: LlamaKVCache | None = None,
-        cache_position: int = 0,
+        start_pos: int = 0,
         use_cache: bool = False,
     ) -> CausalLmOutput:
         batch_size, seq_len = input_ids.size()
@@ -219,8 +217,8 @@ class LlamaModel(BaseModel):
         token_embeds = self.token_embedding(input_ids)
         hidden_state = token_embeds
 
-        cos = self.cos_cached[cache_position : cache_position + seq_len]
-        sin = self.sin_cached[cache_position : cache_position + seq_len]
+        cos = self.cos_cached[start_pos : start_pos + seq_len]
+        sin = self.sin_cached[start_pos : start_pos + seq_len]
         position_embeddings = (cos, sin)
 
         for block in self.decoder_stack:
@@ -228,7 +226,6 @@ class LlamaModel(BaseModel):
                 hidden_state,
                 position_embeddings=position_embeddings,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
             )
 
         hidden_state = self.final_norm(hidden_state)
@@ -267,17 +264,17 @@ class LlamaModel(BaseModel):
             device=input_ids.device,
         )
         past_key_values = None
-        cache_position = 0
+        start_pos = 0
         for step in range(max_new_tokens):
             output = self.forward(
                 model_input,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
+                start_pos=start_pos,
                 use_cache=True,
             )
             logits = output.logits[0, -1]
             past_key_values = output.past_key_values
-            cache_position = len(generated)
+            start_pos = len(generated)
 
             if temperature > 0.0:
                 logits /= temperature
