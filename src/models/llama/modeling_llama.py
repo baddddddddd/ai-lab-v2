@@ -43,9 +43,9 @@ class LlamaAttention(nn.Module):
         self.o_proj = nn.Linear(config.d_model, config.d_model, bias=False)
 
     def forward(self, x: torch.Tensor, position_embeddings: torch.Tensor):
-        # (batch_size, n_ctx, d_model)
-        batch_size, n_ctx, _ = x.size()
-        proj_reshape = (batch_size, n_ctx, self.config.n_heads, self.config.d_head)
+        # (batch_size, seq_len, d_model)
+        batch_size, seq_len, _ = x.size()
+        proj_reshape = (batch_size, seq_len, self.config.n_heads, self.config.d_head)
 
         q = self.q_proj(x).view(proj_reshape).transpose(1, 2)
         k = self.k_proj(x).view(proj_reshape).transpose(1, 2)
@@ -59,7 +59,7 @@ class LlamaAttention(nn.Module):
         values = (
             values.transpose(1, 2)
             .contiguous()
-            .reshape(batch_size, n_ctx, self.config.d_model)
+            .reshape(batch_size, seq_len, self.config.d_model)
         )
 
         out = self.o_proj(values)
@@ -140,15 +140,18 @@ class LlamaModel(BaseModel):
             module.weight.data.normal_(mean=0.0, std=0.02)
 
     def forward(
-        self, input_ids: torch.Tensor, labels: torch.Tensor | None = None
+        self,
+        input_ids: torch.Tensor,
+        labels: torch.Tensor | None = None,
+        start_pos: int = 0,
     ) -> CausalLmOutput:
         seq_len = input_ids.size(1)
 
         token_embeds = self.token_embedding(input_ids)
         hidden_state = token_embeds
 
-        cos = self.cos_cached[:seq_len]
-        sin = self.sin_cached[:seq_len]
+        cos = self.cos_cached[start_pos : start_pos + seq_len]
+        sin = self.sin_cached[start_pos : start_pos + seq_len]
         position_embeddings = (cos, sin)
 
         for block in self.decoder_stack:
