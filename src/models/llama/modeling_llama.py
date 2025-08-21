@@ -31,10 +31,11 @@ class LlamaAttention(nn.Module):
     Self-attention with RoPE
     """
 
-    def __init__(self, config: LlamaConfig):
+    def __init__(self, config: LlamaConfig, layer_idx: int):
         super().__init__()
 
         self.config = config
+        self.layer_idx = layer_idx
 
         self.q_proj = nn.Linear(config.d_model, config.d_model, bias=False)
         self.k_proj = nn.Linear(config.d_model, config.d_model, bias=False)
@@ -84,11 +85,11 @@ class LlamaMLP(nn.Module):
 
 
 class LlamaBlock(nn.Module):
-    def __init__(self, config: LlamaConfig):
+    def __init__(self, config: LlamaConfig, layer_idx: int):
         super().__init__()
 
         self.attn_norm = nn.RMSNorm(config.d_model, eps=1e-6)
-        self.attn = LlamaAttention(config)
+        self.attn = LlamaAttention(config, layer_idx=layer_idx)
         self.mlp_norm = nn.RMSNorm(config.d_model, eps=1e-6)
         self.mlp = LlamaMLP(config)
 
@@ -114,7 +115,10 @@ class LlamaModel(BaseModel):
         )
 
         self.decoder_stack = nn.ModuleList(
-            [LlamaBlock(config) for _ in range(config.n_layers)]
+            [
+                LlamaBlock(config, layer_idx=layer_idx)
+                for layer_idx in range(config.n_layers)
+            ]
         )
 
         self.final_norm = nn.RMSNorm(config.d_model, eps=1e-6)
