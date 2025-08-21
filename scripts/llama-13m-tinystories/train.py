@@ -44,7 +44,7 @@ training_config = TrainingConfig(
 model = LlamaModel(model_config)
 torchinfo.summary(model)
 
-raw_dataset = load_dataset("roneneldan/TinyStories", split="train[:200000]")
+raw_dataset = load_dataset("roneneldan/TinyStories", split="train[:500000]")
 
 tokenizer.pad_token_id = tokenizer.eos_token_id
 
@@ -52,12 +52,10 @@ dataset = CausalLmDataset(
     raw_dataset,
     tokenizer,
     text_column="text",
+    packed=True,
+    packed_length=SEQ_LEN + 1,
+    packing_stride=1,
     add_special_tokens=False,
-    padding=True,
-    truncation=True,
-    max_length=SEQ_LEN + 1,
-    stride=1,
-    return_overflowing_tokens=True,
 )
 
 trainer = Trainer(
