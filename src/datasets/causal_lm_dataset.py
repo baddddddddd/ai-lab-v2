@@ -16,21 +16,72 @@ class CausalLmDataset(BaseDataset):
         dataset: HFDataset,
         tokenizer: BaseTokenizer,
         text_column: str = "text",
+        packed: bool = False,
+        packed_length: int | None = None,
+        packing_stride: int = 0,
         **tokenizer_kwargs,
     ):
-        def tokenize(examples):
-            tokens = tokenizer(examples[text_column], **tokenizer_kwargs)
-            return tokens
-
         self.tokenizer = tokenizer
         self.raw_dataset = dataset
         self.text_column = text_column
-        self.dataset = dataset.map(
+
+        if packed:
+            assert (
+                packed_length is not None
+            ), "packed_length must be specified when packed=True"
+            assert packing_stride >= 0, "packing_stride must be non-negative"
+            assert (
+                packing_stride < packed_length
+            ), "packing_stride must be less than packed_length"
+
+            self.dataset = self._create_packed_dataset(
+                packed_length, packing_stride, **tokenizer_kwargs
+            )
+        else:
+            self.dataset = self._create_tokenized_dataset(**tokenizer_kwargs)
+
+    def _create_tokenized_dataset(self, **tokenizer_kwargs):
+        def tokenize(examples):
+            return self.tokenizer(examples[self.text_column], **tokenizer_kwargs)
+
+        return self.raw_dataset.map(
             tokenize,
-            remove_columns=text_column,
+            remove_columns=self.text_column,
             batched=True,
             num_proc=multiprocessing.cpu_count(),
         )
+
+    def _create_packed_dataset(
+        self, packed_length: int, packing_stride: int = 0, **tokenizer_kwargs
+    ):
+        tokenized_dataset = self._create_tokenized_dataset(**tokenizer_kwargs)
+        sequences = self._pack_sequences(
+            tokenized_dataset, packed_length, packing_stride
+        )
+
+        return HFDataset.from_dict(
+            {
+                "input_ids": sequences,
+            }
+        )
+
+    def _pack_sequences(
+        self,
+        tokenized_dataset,
+        packed_length: int,
+        packing_stride: int = 0,
+    ):
+        sequences = []
+        cur_seq = []
+
+        for item in tokenized_dataset:
+            cur_seq.extend(item["input_ids"])
+
+            while len(cur_seq) >= packed_length:
+                sequences.append(cur_seq[:packed_length])
+                cur_seq = cur_seq[packed_length - packing_stride :]
+
+        return sequences
 
     def __len__(self):
         return len(self.dataset)
