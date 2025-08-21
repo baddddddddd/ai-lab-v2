@@ -93,7 +93,7 @@ class CausalLmDataset(BaseDataset):
             "labels": ids[1:],
         }
 
-    def get_dataloader(self, batch_size: int, shuffle: bool = False):
+    def get_dataloader(self, batch_size: int, shuffle: bool = True):
         def collate_fn(examples):
             input_ids = []
             labels = []
@@ -117,7 +117,10 @@ class CausalLmDataset(BaseDataset):
             batch_size=batch_size,
             collate_fn=collate_fn,
             shuffle=shuffle,
+            num_workers=min(8, multiprocessing.cpu_count()),
             drop_last=True,
+            pin_memory=True,
+            persistent_workers=True,
         )
 
     def dump_corpus(
