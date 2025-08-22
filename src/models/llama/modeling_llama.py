@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ...utils import BaseStreamer, top_p_sample
+from ...utils import BaseStreamer, top_p_sample, BaseKVCache, StaticKVCache
 from ..base_model import BaseModel
 from ..model_output import CausalLmOutput
 from .configuration_llama import LlamaConfig
@@ -26,47 +26,6 @@ def apply_rope(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor):
     return x * cos + rotate_half(x) * sin
 
 
-class LlamaKVCache:
-    def __init__(self, config: LlamaConfig, device: torch.device, batch_size: int = 1):
-        self.max_length = config.n_ctx
-        self.cache_ptr = [0] * config.n_layers
-
-        self.k_cache = torch.zeros(
-            config.n_layers,
-            batch_size,
-            config.n_heads,
-            config.n_ctx,
-            config.d_head,
-            device=device,
-        )
-        self.v_cache = torch.zeros(
-            config.n_layers,
-            batch_size,
-            config.n_heads,
-            config.n_ctx,
-            config.d_head,
-            device=device,
-        )
-
-    def update(
-        self,
-        k_new: torch.Tensor,
-        v_new: torch.Tensor,
-        layer_idx: int,
-    ):
-        seq_len = k_new.size(2)
-        cache_ptr = self.cache_ptr[layer_idx]
-        self.k_cache[layer_idx, :, :, cache_ptr : cache_ptr + seq_len, :] = k_new
-        self.v_cache[layer_idx, :, :, cache_ptr : cache_ptr + seq_len, :] = v_new
-
-        self.cache_ptr[layer_idx] += 1
-
-        return (
-            self.k_cache[layer_idx, :, :, : cache_ptr + seq_len, :],
-            self.v_cache[layer_idx, :, :, : cache_ptr + seq_len, :],
-        )
-
-
 class LlamaAttention(nn.Module):
     """
     Self-attention with RoPE
@@ -87,7 +46,7 @@ class LlamaAttention(nn.Module):
         self,
         x: torch.Tensor,
         position_embeddings: torch.Tensor,
-        past_key_values: LlamaKVCache | None = None,
+        past_key_values: BaseKVCache | None = None,
     ):
         # (batch_size, seq_len, d_model)
         batch_size, seq_len, _ = x.size()
@@ -146,7 +105,7 @@ class LlamaBlock(nn.Module):
         self,
         x: torch.Tensor,
         position_embeddings: torch.Tensor,
-        past_key_values: LlamaKVCache | None = None,
+        past_key_values: BaseKVCache | None = None,
     ):
         attn_output = self.attn(
             self.attn_norm(x),
@@ -201,17 +160,16 @@ class LlamaModel(BaseModel):
         self,
         input_ids: torch.Tensor,
         labels: torch.Tensor | None = None,
-        past_key_values: LlamaKVCache | None = None,
+        past_key_values: BaseKVCache | None = None,
         start_pos: int = 0,
         use_cache: bool = False,
     ) -> CausalLmOutput:
         batch_size, seq_len = input_ids.size()
 
         if use_cache and past_key_values is None:
-            past_key_values = LlamaKVCache(
-                self.config,
-                batch_size=batch_size,
-                device=input_ids.device,
+            past_key_values = StaticKVCache(
+                n_layers=self.config.n_layers,
+                n_ctx=self.config.n_ctx,
             )
 
         token_embeds = self.token_embedding(input_ids)
@@ -265,9 +223,7 @@ class LlamaModel(BaseModel):
         )
         past_key_values = None
         start_pos = 0
-        hard_max_new_tokens = self.config.n_ctx - len(generated) + 1
-        max_new_tokens = min(max_new_tokens, hard_max_new_tokens)
-        for step in range(max_new_tokens):
+        for _ in range(max_new_tokens):
             output = self.forward(
                 model_input,
                 past_key_values=past_key_values,
