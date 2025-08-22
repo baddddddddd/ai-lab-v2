@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ...utils import BaseStreamer, top_p_sample
+from ...utils import BaseKVCache, StaticKVCache, CausalLmGenerationMixin
 from ..base_model import BaseModel
 from ..model_output import CausalLmOutput
 from .configuration_gpt2 import GPT2Config
@@ -28,32 +28,38 @@ def scaled_dot_product_attention(
 
 
 class GPT2Attention(nn.Module):
-    def __init__(self, config: GPT2Config):
+    def __init__(self, config: GPT2Config, layer_idx: int):
         super().__init__()
 
         self.config = config
+        self.layer_idx = layer_idx
 
         self.qkv_proj = nn.Linear(config.d_model, 3 * config.d_model)
         self.out_proj = nn.Linear(config.d_model, config.d_model)
 
-    def forward(self, x: torch.Tensor):
-        # x: (batch_size, n_ctx, d_model)
-        batch_size, n_ctx, _ = x.size()
+    def forward(self, x: torch.Tensor, past_key_values: BaseKVCache | None = None):
+        # x: (batch_size, seq_len, d_model)
+        batch_size, seq_len, _ = x.size()
 
         qkv = self.qkv_proj(x)  # (batch_size, n_ctx, 3 * d_model)
-        qkv = qkv.reshape(batch_size, n_ctx, 3, self.config.n_heads, self.config.d_head)
+        qkv = qkv.reshape(
+            batch_size, seq_len, 3, self.config.n_heads, self.config.d_head
+        )
         qkv = qkv.permute(2, 0, 3, 1, 4)  # (3, batch_size, n_heads, n_ctx, d_head)
         q, k, v = qkv
+
+        if past_key_values is not None:
+            k, v = past_key_values.update(k, v, self.layer_idx)
 
         output = F.scaled_dot_product_attention(
             q,
             k,
             v,
-            is_causal=True,
+            is_causal=seq_len > 1,
             dropout_p=self.config.dropout if self.training else 0.0,
         )
         output = output.transpose(-2, -3).reshape(
-            batch_size, n_ctx, self.config.d_model
+            batch_size, seq_len, self.config.d_model
         )
         output = self.out_proj(output)
         return output
@@ -76,19 +82,19 @@ class GPT2MLP(nn.Module):
 
 
 class GPT2Block(nn.Module):
-    def __init__(self, config: GPT2Config):
+    def __init__(self, config: GPT2Config, layer_idx: int):
         super().__init__()
 
         self.pre_attn_norm = nn.LayerNorm(config.d_model, eps=1e-5)
-        self.attn = GPT2Attention(config)
+        self.attn = GPT2Attention(config, layer_idx=layer_idx)
         self.post_attn_dropout = nn.Dropout(config.dropout)
 
         self.pre_ff_norm = nn.LayerNorm(config.d_model, eps=1e-5)
         self.ff = GPT2MLP(config)
         self.post_ff_dropout = nn.Dropout(config.dropout)
 
-    def forward(self, x: torch.Tensor):
-        attn_output = self.attn(self.pre_attn_norm(x))
+    def forward(self, x: torch.Tensor, past_key_values: BaseKVCache | None = None):
+        attn_output = self.attn(self.pre_attn_norm(x), past_key_values=past_key_values)
         x = x + self.post_attn_dropout(attn_output)
 
         ff_output = self.ff(self.pre_ff_norm(x))
@@ -113,11 +119,13 @@ class GPT2Embedding(nn.Module):
 
         self.dropout = nn.Dropout(config.dropout)
 
-    def forward(self, input_ids: torch.Tensor):
+    def forward(self, input_ids: torch.Tensor, start_pos: int = 0):
         # input_ids: (batch_size, seq_len)
-        n_ctx = input_ids.size(-1)
+        seq_len = input_ids.size(-1)
 
-        positions = torch.arange(n_ctx, device=input_ids.device).unsqueeze(0)
+        positions = torch.arange(
+            start_pos, start_pos + seq_len, device=input_ids.device
+        ).unsqueeze(0)
 
         token_embeds = self.token_embedding(input_ids)
         position_embeds = self.position_embedding(positions)
@@ -128,7 +136,7 @@ class GPT2Embedding(nn.Module):
         return embeddings
 
 
-class GPT2Model(BaseModel):
+class GPT2Model(BaseModel, CausalLmGenerationMixin):
     config_class = GPT2Config
 
     def __init__(self, config: GPT2Config):
@@ -137,7 +145,10 @@ class GPT2Model(BaseModel):
         self.config = config
         self.embedding = GPT2Embedding(config)
         self.transformer_stack = nn.ModuleList(
-            [GPT2Block(config) for _ in range(config.n_layers)]
+            [
+                GPT2Block(config, layer_idx=layer_idx)
+                for layer_idx in range(config.n_layers)
+            ]
         )
 
         self.final_norm = nn.LayerNorm(config.d_model, eps=1e-5)
@@ -160,12 +171,24 @@ class GPT2Model(BaseModel):
             block.ff.ff[2].weight.data *= scale
 
     def forward(
-        self, input_ids: torch.Tensor, labels: torch.Tensor | None = None
+        self,
+        input_ids: torch.Tensor,
+        labels: torch.Tensor | None = None,
+        past_key_values: BaseKVCache | None = None,
+        start_pos: int = 0,
+        use_cache: bool = False,
+        **kwargs,
     ) -> CausalLmOutput:
-        hidden = self.embedding(input_ids)
+        if use_cache and past_key_values is None:
+            past_key_values = StaticKVCache(
+                n_layers=self.config.n_layers,
+                n_ctx=self.config.n_ctx,
+            )
+
+        hidden = self.embedding(input_ids, start_pos=start_pos)
 
         for block in self.transformer_stack:
-            hidden = block(hidden)
+            hidden = block(hidden, past_key_values=past_key_values)
 
         hidden = self.final_norm(hidden)
 
@@ -181,52 +204,5 @@ class GPT2Model(BaseModel):
         return CausalLmOutput(
             logits=logits,
             loss=loss,
+            past_key_values=past_key_values,
         )
-
-    @torch.no_grad()
-    def generate(
-        self,
-        input_ids,
-        max_new_tokens: int = 1024,
-        temperature: float = 0.8,
-        top_p: float = 0.9,
-        streamer: BaseStreamer | None = None,
-    ):
-        from collections import deque
-
-        generated = deque(input_ids.clone().tolist(), maxlen=self.config.n_ctx)
-        if streamer is not None:
-            streamer.put(input_ids)
-
-        for _ in range(max_new_tokens):
-            model_input = torch.tensor(
-                [generated], dtype=torch.long, device=input_ids.device
-            )
-            logits = self.forward(model_input).logits
-            logits = logits[0, -1]
-
-            if temperature > 0.0:
-                logits /= temperature
-                if top_p > 0.0:
-                    next_token = top_p_sample(logits, p=top_p)
-                else:
-                    probs = F.softmax(logits, dim=-1)
-                    next_token = torch.multinomial(probs, num_samples=1).item()
-            else:
-                next_token = torch.argmax(logits).item()
-
-            generated.append(next_token)
-
-            if streamer is not None:
-                streamer.put(torch.tensor([next_token], device=input_ids.device))
-
-            if (
-                self.config.eos_token_id is not None
-                and next_token == self.config.eos_token_id
-            ):
-                break
-
-        if streamer is not None:
-            streamer.end()
-
-        return torch.tensor(generated, device=input_ids.device)
