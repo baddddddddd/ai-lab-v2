@@ -28,17 +28,14 @@ class CausalLmGenerationMixin:
             past_key_values = None
             hard_max_new_tokens = self.config.n_ctx - len(generated) + 1
             max_new_tokens = min(max_new_tokens, hard_max_new_tokens)
-            start_pos = 0
             for _ in range(max_new_tokens):
                 output = self.forward(
                     model_input,
                     past_key_values=past_key_values,
-                    start_pos=start_pos,
                     use_cache=True,
                 )
                 logits = output.logits[0, -1]
                 past_key_values = output.past_key_values
-                start_pos = len(generated)
 
                 if temperature > 0.0:
                     logits /= temperature

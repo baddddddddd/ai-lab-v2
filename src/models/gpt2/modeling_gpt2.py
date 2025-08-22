@@ -119,16 +119,11 @@ class GPT2Embedding(nn.Module):
 
         self.dropout = nn.Dropout(config.dropout)
 
-    def forward(self, input_ids: torch.Tensor, start_pos: int = 0):
+    def forward(self, input_ids: torch.LongTensor, position_ids: torch.LongTensor):
         # input_ids: (batch_size, seq_len)
-        seq_len = input_ids.size(-1)
-
-        positions = torch.arange(
-            start_pos, start_pos + seq_len, device=input_ids.device
-        ).unsqueeze(0)
 
         token_embeds = self.token_embedding(input_ids)
-        position_embeds = self.position_embedding(positions)
+        position_embeds = self.position_embedding(position_ids)
 
         embeddings = token_embeds + position_embeds
         embeddings = self.dropout(embeddings)
@@ -172,20 +167,28 @@ class GPT2Model(BaseModel, CausalLmGenerationMixin):
 
     def forward(
         self,
-        input_ids: torch.Tensor,
-        labels: torch.Tensor | None = None,
+        input_ids: torch.LongTensor,
+        position_ids: torch.LongTensor | None = None,
         past_key_values: BaseKVCache | None = None,
-        start_pos: int = 0,
+        labels: torch.LongTensor | None = None,
         use_cache: bool = False,
         **kwargs,
     ) -> CausalLmOutput:
+        batch_size, seq_len = input_ids.size()
+
         if use_cache and past_key_values is None:
             past_key_values = StaticKVCache(
                 n_layers=self.config.n_layers,
                 n_ctx=self.config.n_ctx,
             )
 
-        hidden = self.embedding(input_ids, start_pos=start_pos)
+        if position_ids is None:
+            cached_tokens = past_key_values.get_seq_length() if past_key_values else 0
+            position_ids = torch.arange(
+                cached_tokens, cached_tokens + seq_len, device=input_ids.device
+            ).unsqueeze(0)
+
+        hidden = self.embedding(input_ids, position_ids)
 
         for block in self.transformer_stack:
             hidden = block(hidden, past_key_values=past_key_values)

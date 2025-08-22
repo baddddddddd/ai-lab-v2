@@ -158,10 +158,10 @@ class LlamaModel(BaseModel, CausalLmGenerationMixin):
 
     def forward(
         self,
-        input_ids: torch.Tensor,
-        labels: torch.Tensor | None = None,
+        input_ids: torch.LongTensor,
+        position_ids: torch.LongTensor | None = None,
         past_key_values: BaseKVCache | None = None,
-        start_pos: int = 0,
+        labels: torch.LongTensor | None = None,
         use_cache: bool = False,
         **kwargs,
     ) -> CausalLmOutput:
@@ -173,11 +173,17 @@ class LlamaModel(BaseModel, CausalLmGenerationMixin):
                 n_ctx=self.config.n_ctx,
             )
 
+        if position_ids is None:
+            cached_tokens = past_key_values.get_seq_length() if past_key_values else 0
+            position_ids = torch.arange(
+                cached_tokens, cached_tokens + seq_len, device=input_ids.device
+            ).unsqueeze(0)
+
         token_embeds = self.token_embedding(input_ids)
         hidden_state = token_embeds
 
-        cos = self.cos_cached[start_pos : start_pos + seq_len]
-        sin = self.sin_cached[start_pos : start_pos + seq_len]
+        cos = self.cos_cached[position_ids]
+        sin = self.sin_cached[position_ids]
         position_embeddings = (cos, sin)
 
         for block in self.decoder_stack:
