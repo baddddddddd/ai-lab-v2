@@ -63,6 +63,7 @@ class CorpusDumper:
         separator: str = "\n\n",
         encoding: str = "utf-8",
         chunk_size: int = 1000,
+        log_interval: int = 10000,
         add_space_prefix: bool = False,
         split_by_newline: bool = False,
         split_by_sentence: bool = False,
@@ -77,7 +78,6 @@ class CorpusDumper:
 
         with open(output_path, "w", encoding=encoding) as f:
             total_examples = len(dataset)
-            log_interval = chunk_size * 10
             total_written = 0
 
             for i in range(0, total_examples, chunk_size):
@@ -107,6 +107,7 @@ class CorpusDumper:
         print(f"Total examples/lines: {total_written}")
         print(f"File size: {output_path.stat().st_size / (1024*1024):.2f} MB")
 
+    @staticmethod
     def from_huggingface_iterable_dataset(
         dataset: HFIterableDataset,
         output_path: str | Path,
@@ -115,6 +116,7 @@ class CorpusDumper:
         separator: str = "\n\n",
         encoding: str = "utf-8",
         chunk_size: int = 1000,
+        log_interval: int = 10000,
         add_space_prefix: bool = False,
         split_by_newline: bool = False,
         split_by_sentence: bool = False,
@@ -148,7 +150,7 @@ class CorpusDumper:
                 )
 
                 count += 1
-                if count % 10000 == 0:
+                if count % log_interval == 0:
                     print(f"Processed {count} examples...")
 
         print(f"Corpus dumped to {output_path}")
