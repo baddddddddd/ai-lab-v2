@@ -16,7 +16,6 @@ class CausalLmDataset(BaseDataset):
         dataset: HFDataset,
         tokenizer: BaseTokenizer,
         text_column: str = "text",
-        return_position_ids: bool = False,
         packed: bool = False,
         packed_length: int | None = None,
         packing_stride: int = 0,
@@ -25,7 +24,6 @@ class CausalLmDataset(BaseDataset):
         self.tokenizer = tokenizer
         self.raw_dataset = dataset
         self.text_column = text_column
-        self.return_position_ids = return_position_ids
 
         if packed:
             assert (
@@ -37,10 +35,7 @@ class CausalLmDataset(BaseDataset):
             ), "packing_stride must be less than packed_length"
 
             self.dataset = self._create_packed_dataset(
-                packed_length=packed_length,
-                packing_stride=packing_stride,
-                return_position_ids=return_position_ids,
-                **tokenizer_kwargs,
+                packed_length, packing_stride, **tokenizer_kwargs
             )
         else:
             self.dataset = self._create_tokenized_dataset(**tokenizer_kwargs)
@@ -57,77 +52,51 @@ class CausalLmDataset(BaseDataset):
         )
 
     def _create_packed_dataset(
-        self,
-        packed_length: int,
-        packing_stride: int = 0,
-        return_position_ids: bool = True,
-        **tokenizer_kwargs,
+        self, packed_length: int, packing_stride: int = 0, **tokenizer_kwargs
     ):
         tokenized_dataset = self._create_tokenized_dataset(**tokenizer_kwargs)
-        sequences, position_ids = self._pack_sequences(
-            tokenized_dataset,
-            packed_length=packed_length,
-            packing_stride=packing_stride,
-            return_position_ids=return_position_ids,
+        sequences = self._pack_sequences(
+            tokenized_dataset, packed_length, packing_stride
         )
 
-        dataset_dict = {}
-        dataset_dict["input_ids"] = sequences
-
-        if return_position_ids:
-            dataset_dict["position_ids"] = position_ids
-
-        return HFDataset.from_dict(dataset_dict)
+        return HFDataset.from_dict(
+            {
+                "input_ids": sequences,
+            }
+        )
 
     def _pack_sequences(
         self,
         tokenized_dataset,
         packed_length: int,
         packing_stride: int = 0,
-        return_position_ids: bool = True,
     ):
         sequences = []
-        position_ids = []
         cur_seq = []
-        cur_pos = []
 
         for item in tokenized_dataset:
-            input_ids = item["input_ids"]
-            cur_seq.extend(input_ids)
-
-            if return_position_ids:
-                cur_pos.extend(range(len(input_ids)))
+            cur_seq.extend(item["input_ids"])
 
             while len(cur_seq) >= packed_length:
                 sequences.append(cur_seq[:packed_length])
                 cur_seq = cur_seq[packed_length - packing_stride :]
 
-                if return_position_ids:
-                    position_ids.append(cur_pos[:packed_length])
-                    cur_pos = cur_pos[packed_length - packing_stride :]
-
-        return sequences, position_ids
+        return sequences
 
     def __len__(self):
         return len(self.dataset)
 
     def __getitem__(self, idx):
-        example = self.dataset[idx].copy()
-        ids = example["input_ids"]
-
-        example["input_ids"] = ids[:-1]
-        example["labels"] = ids[1:]
-
-        if self.return_position_ids:
-            example["position_ids"].pop()
-
-        return example
+        ids = self.dataset[idx]["input_ids"]
+        return {
+            "input_ids": ids[:-1],
+            "labels": ids[1:],
+        }
 
     def get_dataloader(self, batch_size: int, shuffle: bool = True):
         def collate_fn(examples):
             input_ids = []
             labels = []
-            position_ids = []
 
             for example in examples:
                 example_ids = torch.LongTensor(example["input_ids"])
@@ -138,17 +107,10 @@ class CausalLmDataset(BaseDataset):
                 input_ids.append(example_ids)
                 labels.append(example_labels)
 
-                if self.return_position_ids:
-                    position_ids.append(torch.LongTensor(example["position_ids"]))
-
-            batch = dict()
-            batch["input_ids"] = torch.stack(input_ids)
-            batch["labels"] = torch.stack(labels)
-
-            if self.return_position_ids:
-                batch["position_ids"] = torch.stack(position_ids)
-
-            return batch
+            return {
+                "input_ids": torch.stack(input_ids),
+                "labels": torch.stack(labels),
+            }
 
         return DataLoader(
             self,
