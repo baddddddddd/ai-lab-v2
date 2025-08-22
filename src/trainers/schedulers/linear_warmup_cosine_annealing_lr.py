@@ -15,7 +15,7 @@ class LinearWarmupCosineAnnealingLR(_LRScheduler):
             return [
                 base_lr * step / max(1, self.warmup_steps) for base_lr in self.base_lrs
             ]
-        else:
+        elif step < self.total_steps:
             progress = (step - self.warmup_steps) / max(
                 1, self.total_steps - self.warmup_steps
             )
@@ -24,3 +24,5 @@ class LinearWarmupCosineAnnealingLR(_LRScheduler):
                 + (base_lr - self.min_lr) * 0.5 * (1 + math.cos(math.pi * progress))
                 for base_lr in self.base_lrs
             ]
+        else:
+            return [self.min_lr for _ in self.base_lrs]
