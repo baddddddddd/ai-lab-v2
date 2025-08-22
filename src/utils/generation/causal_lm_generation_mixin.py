@@ -26,6 +26,8 @@ class CausalLmGenerationMixin:
                 device=input_ids.device,
             )
             past_key_values = None
+            hard_max_new_tokens = self.config.n_ctx - len(generated) + 1
+            max_new_tokens = min(max_new_tokens, hard_max_new_tokens)
             start_pos = 0
             for _ in range(max_new_tokens):
                 output = self.forward(
