@@ -163,6 +163,7 @@ class LlamaModel(BaseModel, CausalLmGenerationMixin):
         past_key_values: BaseKVCache | None = None,
         start_pos: int = 0,
         use_cache: bool = False,
+        **kwargs,
     ) -> CausalLmOutput:
         batch_size, seq_len = input_ids.size()
 
