@@ -1,3 +1,4 @@
+import itertools
 import multiprocessing
 from pathlib import Path
 
@@ -35,9 +36,17 @@ class CausalLmDataset(BaseDataset):
                 packing_stride < packed_length
             ), "packing_stride must be less than packed_length"
 
-            self.dataset = self._create_packed_dataset(
-                packed_length, packing_stride, **tokenizer_kwargs
-            )
+            if tokenized:
+                self.dataset = self._create_packed_dataset(
+                    packed_length, packing_stride, **tokenizer_kwargs
+                )
+            else:
+                self.dataset = self._pack_sequences(
+                    dataset,
+                    packed_length=packed_length,
+                    packing_stride=packing_stride,
+                )
+
         elif tokenized:
             self.dataset = self._create_tokenized_dataset(**tokenizer_kwargs)
         else:
@@ -58,15 +67,11 @@ class CausalLmDataset(BaseDataset):
         self, packed_length: int, packing_stride: int = 0, **tokenizer_kwargs
     ):
         tokenized_dataset = self._create_tokenized_dataset(**tokenizer_kwargs)
-        sequences = self._pack_sequences(
+        packed_dataset = self._pack_sequences(
             tokenized_dataset, packed_length, packing_stride
         )
 
-        return HFDataset.from_dict(
-            {
-                "input_ids": sequences,
-            }
-        )
+        return packed_dataset
 
     def _pack_sequences(
         self,
@@ -74,17 +79,37 @@ class CausalLmDataset(BaseDataset):
         packed_length: int,
         packing_stride: int = 0,
     ):
-        sequences = []
         cur_seq = []
 
-        for item in tokenized_dataset:
-            cur_seq.extend(item["input_ids"])
+        if packed_length <= packing_stride:
+            raise ValueError("packed_length must be greater than packing_stride")
 
-            while len(cur_seq) >= packed_length:
-                sequences.append(cur_seq[:packed_length])
-                cur_seq = cur_seq[packed_length - packing_stride :]
+        def flatten_then_pack(examples):
+            cur_seq.extend(itertools.chain.from_iterable(examples["input_ids"]))
 
-        return sequences
+            sequences = []
+            for i in range(
+                0, len(cur_seq) - packed_length + 1, packed_length - packing_stride
+            ):
+                sequences.append(cur_seq[i : i + packed_length])
+
+            if sequences:
+                remaining = len(cur_seq) - i - packed_length
+            else:
+                remaining = len(cur_seq)
+
+            if remaining > 0:
+                del cur_seq[:-remaining]
+            else:
+                cur_seq.clear()
+
+            return {"input_ids": sequences}
+
+        return tokenized_dataset.map(
+            flatten_then_pack,
+            batched=True,
+            remove_columns=tokenized_dataset.column_names,
+        )
 
     def __len__(self):
         return len(self.dataset)
