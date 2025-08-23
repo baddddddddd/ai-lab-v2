@@ -19,6 +19,7 @@ class CausalLmDataset(BaseDataset):
         packed: bool = False,
         packed_length: int | None = None,
         packing_stride: int = 0,
+        tokenized: bool = False,
         **tokenizer_kwargs,
     ):
         self.tokenizer = tokenizer
@@ -37,8 +38,10 @@ class CausalLmDataset(BaseDataset):
             self.dataset = self._create_packed_dataset(
                 packed_length, packing_stride, **tokenizer_kwargs
             )
-        else:
+        elif tokenized:
             self.dataset = self._create_tokenized_dataset(**tokenizer_kwargs)
+        else:
+            self.dataset = dataset
 
     def _create_tokenized_dataset(self, **tokenizer_kwargs):
         def tokenize(examples):
