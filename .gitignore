@@ -1,5 +1,6 @@
 # Added by vlad
 /*.py
+*.vocab
 checkpoints
 
 # Byte-compiled / optimized / DLL files
