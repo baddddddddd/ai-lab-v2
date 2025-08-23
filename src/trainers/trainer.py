@@ -92,6 +92,7 @@ class Trainer:
             print(f"=" * 75)
 
             total_loss = 0.0
+            loss_count = 0
             for batch_idx, inputs in enumerate(self.dataloader):
                 if epoch <= start_epoch and batch_idx < start_batch_idx:
                     continue
@@ -114,6 +115,7 @@ class Trainer:
 
                 optimizer_steps += 1
                 total_loss += loss.item()
+                loss_count += 1
 
                 if self.args.save_steps and (
                     optimizer_steps % self.args.save_steps == 0
@@ -123,7 +125,7 @@ class Trainer:
                 if self.args.logging_steps and (
                     optimizer_steps % self.args.logging_steps == 0
                 ):
-                    avg_loss = total_loss / self.args.logging_steps
+                    avg_loss = total_loss / loss_count
                     processed = (batch_idx + 1) * self.args.train_batch_size
                     batch_progress = f"[{processed:>{counter_width}d}/{dataset_size}]"
 
@@ -132,6 +134,7 @@ class Trainer:
                     lr_log = f"{self.scheduler.get_last_lr()[0]:.8f}"
 
                     total_loss = 0.0
+                    loss_count = 0
                     self.log(
                         batch_progress,
                         avg_loss=avg_loss_log,
