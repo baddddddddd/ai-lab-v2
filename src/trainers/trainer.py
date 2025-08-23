@@ -1,3 +1,4 @@
+import itertools
 import json
 import os
 import pathlib
@@ -87,18 +88,26 @@ class Trainer:
         scaler = torch.amp.GradScaler(device=self.device)
 
         self.model.train()
-        for epoch in range(start_epoch, self.args.num_train_epochs):
+        epoch = start_epoch
+        while (
+            epoch < self.args.num_train_epochs
+            and optimizer_steps < self.args.total_steps
+        ):
             print(f"EPOCH {epoch + 1}")
             print(f"=" * 75)
 
             total_loss = 0.0
             loss_count = 0
-            for batch_idx, inputs in enumerate(self.dataloader):
-                if epoch < start_epoch or (
-                    epoch == start_epoch and batch_idx < start_batch_idx
-                ):
-                    continue
 
+            dataloader_iter = iter(self.dataloader)
+            if epoch == start_epoch and start_batch_idx > 0:
+                for _ in itertools.islice(dataloader_iter, start_batch_idx):
+                    pass
+                batch_start_idx = start_batch_idx
+            else:
+                batch_start_idx = 0
+
+            for batch_idx, inputs in enumerate(dataloader_iter, start=batch_start_idx):
                 inputs = self._prepare_inputs(inputs)
 
                 with torch.amp.autocast(device_type=self.device.type):
@@ -143,6 +152,11 @@ class Trainer:
                         lr=lr_log,
                         steps=optimizer_steps,
                     )
+
+                if optimizer_steps >= self.args.total_steps:
+                    break
+
+            epoch += 1
 
     def get_latest_checkpoint(self):
         files = os.listdir(self.args.output_dir)
