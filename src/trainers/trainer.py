@@ -94,7 +94,9 @@ class Trainer:
             total_loss = 0.0
             loss_count = 0
             for batch_idx, inputs in enumerate(self.dataloader):
-                if epoch <= start_epoch and batch_idx < start_batch_idx:
+                if epoch < start_epoch or (
+                    epoch == start_epoch and batch_idx < start_batch_idx
+                ):
                     continue
 
                 inputs = self._prepare_inputs(inputs)
