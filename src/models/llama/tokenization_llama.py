@@ -120,6 +120,7 @@ class LlamaTokenizer(BaseTokenizer):
         conversation: list[dict[str, str]] | list[list[dict[str, str]]],
         tokenize: bool = True,
         add_generation_prompt: bool = False,
+        return_tensors: str | None = None,
     ):
         user_label = "Human: "
         assistant_label = "\n\nAI: "
@@ -168,6 +169,11 @@ class LlamaTokenizer(BaseTokenizer):
             batched_result = [
                 self.convert_tokens_to_ids(tokens) for tokens in batched_tokens
             ]
+
+            if return_tensors == "pt":
+                batched_result = torch.LongTensor(batched_result)
+                return batched_result
+
         else:
             batched_result = [
                 self._convert_tokens_to_string(tokens) for tokens in batched_tokens
