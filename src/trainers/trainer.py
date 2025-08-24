@@ -214,7 +214,7 @@ class Trainer:
 
     def load_optimizer(self, checkpoint_folder: pathlib.Path):
         optimizer_file = checkpoint_folder / Trainer.OPTIMIZER_FILENAME
-        optimizer_state = torch.load(optimizer_file)
+        optimizer_state = torch.load(optimizer_file, map_location=self.device)
         self.optimizer.load_state_dict(optimizer_state)
 
     def save_optimizer(self, save_directory: pathlib.Path):
@@ -224,7 +224,7 @@ class Trainer:
 
     def load_scheduler(self, checkpoint_folder: pathlib.Path):
         scheduler_file = checkpoint_folder / Trainer.SCHEDULER_FILENAME
-        scheduler_state = torch.load(scheduler_file)
+        scheduler_state = torch.load(scheduler_file, map_location=self.device)
         self.scheduler.load_state_dict(scheduler_state)
 
     def save_scheduler(self, save_directory: pathlib.Path):
@@ -234,7 +234,9 @@ class Trainer:
 
     def load_rng_state(self, checkpoint_folder: pathlib.Path):
         trainer_state_file = checkpoint_folder / Trainer.RNG_STATE_FILENAME
-        trainer_state = torch.load(trainer_state_file, weights_only=False)
+        trainer_state = torch.load(
+            trainer_state_file, weights_only=False, map_location=self.device
+        )
 
         torch.set_rng_state(trainer_state["torch_rng_state"])
         torch.cuda.set_rng_state_all(trainer_state["cuda_rng_state"])
