@@ -234,9 +234,7 @@ class Trainer:
 
     def load_rng_state(self, checkpoint_folder: pathlib.Path):
         trainer_state_file = checkpoint_folder / Trainer.RNG_STATE_FILENAME
-        trainer_state = torch.load(
-            trainer_state_file, weights_only=False, map_location=self.device
-        )
+        trainer_state = torch.load(trainer_state_file, weights_only=False)
 
         torch.set_rng_state(trainer_state["torch_rng_state"])
         torch.cuda.set_rng_state_all(trainer_state["cuda_rng_state"])
