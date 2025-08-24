@@ -43,7 +43,7 @@ class Trainer:
         self.eval_dataset = eval_dataset
 
         self.dataloader = DataLoader(
-            dataset,
+            train_dataset,
             batch_size=args.train_batch_size,
             collate_fn=data_collator,
         )
