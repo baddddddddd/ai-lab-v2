@@ -34,6 +34,7 @@ class Trainer:
         args: TrainingConfig,
         train_dataset: BaseDataset,
         eval_dataset: BaseDataset | None = None,
+        data_collator=None,
     ):
         self.model = model
         self.tokenizer = tokenizer
@@ -41,7 +42,12 @@ class Trainer:
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
 
-        self.dataloader = train_dataset.get_dataloader(batch_size=args.train_batch_size)
+        self.dataloader = DataLoader(
+            dataset,
+            batch_size=args.train_batch_size,
+            collate_fn=data_collator,
+        )
+
         self.optimizer = optim.AdamW(
             model.parameters(),
             lr=args.learning_rate,
@@ -116,8 +122,8 @@ class Trainer:
                     loss = output.loss
 
                 self.scaler.scale(loss).backward()
-
                 self.scaler.unscale_(self.optimizer)
+
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
 
                 self.scaler.step(self.optimizer)
