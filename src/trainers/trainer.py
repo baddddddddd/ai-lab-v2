@@ -24,6 +24,7 @@ class Trainer:
     TRAINING_ARGS_FILENAME = "training_args.bin"
     OPTIMIZER_FILENAME = "optimizer.pt"
     SCHEDULER_FILENAME = "scheduler.pt"
+    SCALER_FILENAME = "scaler.pt"
     RNG_STATE_FILENAME = "rng_state.pth"
 
     def __init__(
@@ -56,6 +57,8 @@ class Trainer:
         )
         print(f"Using device: {self.device}")
 
+        self.scaler = torch.amp.GradScaler(device=self.device)
+
         self.model.to(self.device)
 
         os.makedirs(self.args.output_dir, exist_ok=True)
@@ -85,8 +88,6 @@ class Trainer:
         dataset_size = len(self.train_dataset)
         counter_width = len(str(dataset_size))
 
-        scaler = torch.amp.GradScaler(device=self.device)
-
         self.model.train()
         epoch = start_epoch
         while (
@@ -114,13 +115,13 @@ class Trainer:
                     output = self.model(**inputs)
                     loss = output.loss
 
-                scaler.scale(loss).backward()
+                self.scaler.scale(loss).backward()
 
-                scaler.unscale_(self.optimizer)
+                self.scaler.unscale_(self.optimizer)
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
 
-                scaler.step(self.optimizer)
-                scaler.update()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
                 self.optimizer.zero_grad(set_to_none=True)
                 self.scheduler.step()
 
@@ -182,6 +183,7 @@ class Trainer:
     def resume_from_folder(self, checkpoint_folder: pathlib.Path):
         self.model = self.model.__class__.from_pretrained(checkpoint_folder)
         self.load_optimizer(checkpoint_folder)
+        self.load_scaler(checkpoint_folder)
         self.load_scheduler(checkpoint_folder)
         self.load_rng_state(checkpoint_folder)
 
@@ -211,6 +213,16 @@ class Trainer:
 
         with open(save_path, "w") as f:
             f.write(json_string)
+
+    def load_scaler(self, checkpoint_folder: pathlib.Path):
+        scaler_file = checkpoint_folder / Trainer.SCALER_FILENAME
+        scaler_state = torch.load(scaler_file, map_location=self.device)
+        self.scaler.load_state_dict(scaler_state)
+
+    def save_scaler(self, save_directory: pathlib.Path):
+        scaler_state = self.scaler.state_dict()
+        scaler_file = save_directory / Trainer.SCALER_FILENAME
+        torch.save(scaler_state, scaler_file)
 
     def load_optimizer(self, checkpoint_folder: pathlib.Path):
         optimizer_file = checkpoint_folder / Trainer.OPTIMIZER_FILENAME
@@ -272,6 +284,7 @@ class Trainer:
         self.model.save_pretrained(save_directory=save_folder)
         self.save_trainer_state(save_folder, epoch, batch_idx, optimizer_steps)
         self.save_optimizer(save_directory=save_folder)
+        self.save_scaler(save_directory=save_folder)
         self.save_scheduler(save_directory=save_folder)
         self.save_rng_state(save_directory=save_folder)
 
