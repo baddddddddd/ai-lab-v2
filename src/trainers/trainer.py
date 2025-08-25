@@ -20,6 +20,7 @@ class Trainer:
         train_dataloader: DataLoader | None = None,
         eval_dataloader: DataLoader | None = None,
         optimizer: optim.Optimizer | None = None,
+        scheduler: optim.lr_scheduler._LRScheduler | None = None,
     ):
         self.model = model
         self.args = args
@@ -29,6 +30,7 @@ class Trainer:
         self.train_dataloader = train_dataloader
         self.eval_dataloader = eval_dataloader
         self.optimizer = optimizer
+        self.scheduler = scheduler
 
         if self.args.device is not None:
             self.device = torch.device(self.args.device)
@@ -48,6 +50,19 @@ class Trainer:
             betas=(self.args.adam_beta1, self.args.adam_beta2),
             eps=self.args.adam_epsilon,
             weight_decay=self.args.weight_decay,
+        )
+
+    def _create_scheduler(self):
+        if self.args.warmup_steps is None:
+            self.args.warmup_steps = math.ceil(
+                self.args.max_steps * self.args.warmup_ratio
+            )
+
+        return optim.lr_scheduler.LinearLR(
+            optimizer=self.optimizer,
+            start_factor=0.0,
+            end_factor=1.0,
+            total_iters=self.args.warmup_steps,
         )
 
     def _create_train_dataloader(self):
@@ -108,10 +123,9 @@ class Trainer:
         self.optimizer.step()
         self.optimizer.zero_grad(set_to_none=True)
 
-    def train(self, resume_from_checkpoint: bool = False):
-        if self.optimizer is None:
-            self.optimizer = self._create_optimizer()
+        self.scheduler.step()
 
+    def train(self, resume_from_checkpoint: bool = False):
         if self.train_dataloader is None:
             self.train_dataloader = self._create_train_dataloader()
 
@@ -119,13 +133,21 @@ class Trainer:
         num_steps_per_epoch = math.ceil(
             num_batch_per_epoch / self.args.gradient_accumulation_steps
         )
-        max_steps = self.args.max_steps
-        if max_steps is None:
-            max_steps = math.ceil(self.args.num_train_epochs * num_steps_per_epoch)
+
+        if self.args.max_steps is None:
+            self.args.max_steps = math.ceil(
+                self.args.num_train_epochs * num_steps_per_epoch
+            )
+
+        if self.optimizer is None:
+            self.optimizer = self._create_optimizer()
+
+        if self.scheduler is None:
+            self.scheduler = self._create_scheduler()
 
         optimizer_step_count = 0  # TODO: Update this when resuming from checkpoint
         accumulated_steps = 0
-        while optimizer_step_count < max_steps:
+        while optimizer_step_count < self.args.max_steps:
             for batch_idx, inputs in enumerate(self.train_dataloader):
                 loss = self._training_step(inputs)
                 accumulated_steps += 1
@@ -135,10 +157,10 @@ class Trainer:
                     optimizer_step_count += 1
                     accumulated_steps = 0
 
-                    if optimizer_step_count >= max_steps:
+                    if optimizer_step_count >= self.args.max_steps:
                         break
 
             # TODO: Make sure that this always matches what's inside the loop
-            if accumulated_steps > 0 and optimizer_step_count < max_steps:
+            if accumulated_steps > 0 and optimizer_step_count < self.args.max_steps:
                 self._optimizer_step()
                 optimizer_step_count += 1

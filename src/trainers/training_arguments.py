@@ -17,6 +17,8 @@ class TrainingArguments:
         adam_beta2: float = 0.999,
         adam_epsilon: float = 1e-08,
         max_grad_norm: float = 1.0,
+        warmup_ratio: float = 0.0,
+        warmup_steps: int | None = None,
         device: str | None = None,
         dataloader_drop_last: bool = False,
         dataloader_num_workers: int = 0,
@@ -38,6 +40,8 @@ class TrainingArguments:
         self.adam_beta2 = adam_beta2
         self.adam_epsilon = adam_epsilon
         self.max_grad_norm = max_grad_norm
+        self.warmup_ratio = warmup_ratio
+        self.warmup_steps = warmup_steps
 
         self.device = device
 
