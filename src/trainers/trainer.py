@@ -43,6 +43,30 @@ class Trainer:
 
         self.model.to(self.device)
 
+    def get_optimizer(self):
+        if self.optimizer is None:
+            self.optimizer = self._create_optimizer()
+
+        return self.optimizer
+
+    def get_scheduler(self):
+        if self.scheduler is None:
+            self.scheduler = self._create_scheduler()
+
+        return self.scheduler
+
+    def get_train_dataloader(self):
+        if self.train_dataloader is None:
+            self.train_dataloader = self._create_train_dataloader()
+
+        return self.train_dataloader
+
+    def get_eval_dataloader(self):
+        if self.eval_dataloader is None:
+            self.eval_dataloader = self._create_eval_dataloader()
+
+        return self.eval_dataloader
+
     def _create_optimizer(self):
         return optim.AdamW(
             params=self.model.parameters(),
