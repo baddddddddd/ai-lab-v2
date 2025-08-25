@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, IterableDataset, DataLoader
 
+from ..utils.schedulers import LinearWarmupLR
 from .training_arguments import TrainingArguments
 
 
@@ -82,11 +83,9 @@ class Trainer:
                 self.args.max_steps * self.args.warmup_ratio
             )
 
-        return optim.lr_scheduler.LinearLR(
+        return LinearWarmupLR(
             optimizer=self.optimizer,
-            start_factor=0.0,
-            end_factor=1.0,
-            total_iters=self.args.warmup_steps,
+            warmup_steps=self.args.warmup_steps,
         )
 
     def _create_train_dataloader(self):
