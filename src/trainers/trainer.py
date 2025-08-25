@@ -18,6 +18,7 @@ class Trainer:
         eval_dataset: Dataset | IterableDataset | None = None,
         train_dataloader: DataLoader | None = None,
         eval_dataloader: DataLoader | None = None,
+        optimizer: optim.Optimizer | None = None,
     ):
         self.model = model
         self.args = args
@@ -26,6 +27,16 @@ class Trainer:
         self.eval_dataset = eval_dataset
         self.train_dataloader = train_dataloader
         self.eval_dataloader = eval_dataloader
+        self.optimizer = optimizer
+
+    def _create_optimizer(self):
+        return optim.AdamW(
+            params=self.model.parameters(),
+            lr=self.args.learning_rate,
+            betas=(self.args.adam_beta1, self.args.adam_beta2),
+            eps=self.args.adam_epsilon,
+            weight_decay=self.args.weight_decay,
+        )
 
     def _create_train_dataloader(self):
         return DataLoader(
@@ -55,5 +66,8 @@ class Trainer:
         pass
 
     def train(self, resume_from_checkpoint: bool = False):
+        if self.optimizer is None:
+            self.optimizer = self._create_optimizer()
+
         if self.train_dataloader is None:
             self.train_dataloader = self._create_train_dataloader()
