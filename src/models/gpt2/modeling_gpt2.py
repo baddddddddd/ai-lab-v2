@@ -199,8 +199,8 @@ class GPT2Model(BaseModel, CausalLmGenerationMixin):
 
         loss = None
         if labels is not None:
-            x = logits.view(-1, logits.size(-1))
-            y = labels.view(-1)
+            x = logits.reshape(-1, logits.size(-1))
+            y = labels.reshape(-1)
 
             loss = self.loss_func(x, y)
 
