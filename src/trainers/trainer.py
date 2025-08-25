@@ -148,6 +148,15 @@ class Trainer:
 
         self.scheduler.step()
 
+    def _update_progress_and_log(
+        self,
+        epoch_done: int,
+        optimizer_step_count: int,
+        accumulated_steps: int,
+        loss: torch.Tensor,
+    ):
+        pass
+
     def train(self, resume_from_checkpoint: bool = False):
         if self.train_dataloader is None:
             self.train_dataloader = self._create_train_dataloader()
@@ -169,6 +178,7 @@ class Trainer:
             self.scheduler = self._create_scheduler()
 
         optimizer_step_count = 0  # TODO: Update this when resuming from checkpoint
+        epoch_done = 0  # TODO: Update this when resuming from checkpoint
         accumulated_steps = 0
         while optimizer_step_count < self.args.max_steps:
             for batch_idx, inputs in enumerate(self.train_dataloader):
@@ -178,6 +188,14 @@ class Trainer:
                 if accumulated_steps == self.args.gradient_accumulation_steps:
                     self._optimizer_step()
                     optimizer_step_count += 1
+
+                    self._update_progress_and_log(
+                        epoch_done=epoch_done,
+                        optimizer_step_count=optimizer_step_count,
+                        accumulated_steps=accumulated_steps,
+                        loss=loss,
+                    )
+
                     accumulated_steps = 0
 
                     if optimizer_step_count >= self.args.max_steps:
@@ -187,4 +205,14 @@ class Trainer:
             if accumulated_steps > 0 and optimizer_step_count < self.args.max_steps:
                 self._optimizer_step()
                 optimizer_step_count += 1
+
+                self._update_progress_and_log(
+                    epoch_done=epoch_done,
+                    optimizer_step_count=optimizer_step_count,
+                    accumulated_steps=accumulated_steps,
+                    loss=loss,
+                )
+
                 accumulated_steps = 0
+
+            epoch_done += 1
