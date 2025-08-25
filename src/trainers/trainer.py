@@ -89,6 +89,11 @@ class Trainer:
         return loss.detach()
 
     def _optimizer_step(self):
+        if self.args.max_grad_norm > 0.0:
+            torch.nn.utils.clip_grad_norm_(
+                self.model.parameters(), max_norm=self.args.max_grad_norm
+            )
+
         self.optimizer.step()
         self.optimizer.zero_grad(set_to_none=True)
 
