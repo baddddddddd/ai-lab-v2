@@ -164,3 +164,4 @@ class Trainer:
             if accumulated_steps > 0 and optimizer_step_count < self.args.max_steps:
                 self._optimizer_step()
                 optimizer_step_count += 1
+                accumulated_steps = 0
