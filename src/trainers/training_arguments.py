@@ -19,6 +19,7 @@ class TrainingArguments:
         max_grad_norm: float = 1.0,
         warmup_ratio: float = 0.0,
         warmup_steps: int | None = None,
+        logging_steps: int | None = None,
         device: str | None = None,
         dataloader_drop_last: bool = False,
         dataloader_num_workers: int = 0,
@@ -42,6 +43,8 @@ class TrainingArguments:
         self.max_grad_norm = max_grad_norm
         self.warmup_ratio = warmup_ratio
         self.warmup_steps = warmup_steps
+
+        self.logging_steps = logging_steps
 
         self.device = device
 

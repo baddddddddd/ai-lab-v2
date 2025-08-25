@@ -1,6 +1,10 @@
 import math
 from typing import Optional, Callable, Any
 
+from rich.console import Console
+from rich.live import Live
+from rich.table import Table
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -43,6 +47,17 @@ class Trainer:
             )
 
         self.model.to(self.device)
+
+        # logging
+        self._accumulated_loss = 0.0
+        self._loss_steps = 0
+
+        self.console = Console()
+        self.table = Table(show_header=True)
+        self.table.add_column("Step", justify="right")
+        self.table.add_column("Training Loss", justify="right")
+        self.table.add_column("Learning Rate", justify="right")
+        self.live = Live(self.table, console=self.console, auto_refresh=False)
 
     def get_optimizer(self):
         if self.optimizer is None:
@@ -148,14 +163,33 @@ class Trainer:
 
         self.scheduler.step()
 
+    def _update_loss_tracking(self, loss: torch.Tensor):
+        self._accumulated_loss += loss.item()
+        self._loss_steps += 1
+
+    def _reset_loss_tracking(self, loss: torch.Tensor):
+        self._accumulated_loss = 0.0
+        self._loss_steps = 0
+
     def _update_progress_and_log(
         self,
         epoch_done: int,
         optimizer_step_count: int,
-        accumulated_steps: int,
-        loss: torch.Tensor,
     ):
-        pass
+        if optimizer_step_count % self.args.logging_steps != 0:
+            return
+
+        avg_loss = (
+            self._accumulated_loss
+            / self._loss_steps
+            * self.args.gradient_accumulation_steps
+        )
+        cur_lr = self.scheduler.get_last_lr()[0]
+
+        self.table.add_row(
+            str(optimizer_step_count), f"{avg_loss:.6f}", f"{cur_lr:.4e}"
+        )
+        self.live.refresh()
 
     def train(self, resume_from_checkpoint: bool = False):
         if self.train_dataloader is None:
@@ -177,6 +211,8 @@ class Trainer:
         if self.scheduler is None:
             self.scheduler = self._create_scheduler()
 
+        self.live.start()
+
         optimizer_step_count = 0  # TODO: Update this when resuming from checkpoint
         epoch_done = 0  # TODO: Update this when resuming from checkpoint
         accumulated_steps = 0
@@ -185,6 +221,8 @@ class Trainer:
                 loss = self._training_step(inputs)
                 accumulated_steps += 1
 
+                self._update_loss_tracking(loss)
+
                 if accumulated_steps == self.args.gradient_accumulation_steps:
                     self._optimizer_step()
                     optimizer_step_count += 1
@@ -192,8 +230,6 @@ class Trainer:
                     self._update_progress_and_log(
                         epoch_done=epoch_done,
                         optimizer_step_count=optimizer_step_count,
-                        accumulated_steps=accumulated_steps,
-                        loss=loss,
                     )
 
                     accumulated_steps = 0
@@ -209,10 +245,10 @@ class Trainer:
                 self._update_progress_and_log(
                     epoch_done=epoch_done,
                     optimizer_step_count=optimizer_step_count,
-                    accumulated_steps=accumulated_steps,
-                    loss=loss,
                 )
 
                 accumulated_steps = 0
 
             epoch_done += 1
+
+        self.live.stop()
