@@ -17,6 +17,7 @@ class TrainingArguments:
         adam_beta2: float = 0.999,
         adam_epsilon: float = 1e-08,
         max_grad_norm: float = 1.0,
+        device: str | None = None,
         dataloader_drop_last: bool = False,
         dataloader_num_workers: int = 0,
         dataloader_prefetch_factor: int | None = None,
@@ -37,6 +38,8 @@ class TrainingArguments:
         self.adam_beta2 = adam_beta2
         self.adam_epsilon = adam_epsilon
         self.max_grad_norm = max_grad_norm
+
+        self.device = device
 
         self.dataloader_drop_last = dataloader_drop_last
         self.dataloader_num_workers = dataloader_num_workers

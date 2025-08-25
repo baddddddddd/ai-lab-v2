@@ -30,6 +30,17 @@ class Trainer:
         self.eval_dataloader = eval_dataloader
         self.optimizer = optimizer
 
+        if self.args.device is not None:
+            self.device = torch.device(self.args.device)
+        else:
+            self.device = (
+                torch.device("cuda")
+                if torch.cuda.is_available()
+                else torch.device("cpu")
+            )
+
+        self.model.to(self.device)
+
     def _create_optimizer(self):
         return optim.AdamW(
             params=self.model.parameters(),
@@ -113,19 +124,21 @@ class Trainer:
             max_steps = math.ceil(self.args.num_train_epochs * num_steps_per_epoch)
 
         optimizer_step_count = 0  # TODO: Update this when resuming from checkpoint
+        accumulated_steps = 0
         while optimizer_step_count < max_steps:
             for batch_idx, inputs in enumerate(self.train_dataloader):
                 loss = self._training_step(inputs)
+                accumulated_steps += 1
 
-                if (batch_idx + 1) % self.args.gradient_accumulation_steps == 0:
+                if accumulated_steps == self.args.gradient_accumulation_steps:
                     self._optimizer_step()
                     optimizer_step_count += 1
+                    accumulated_steps = 0
 
                     if optimizer_step_count >= max_steps:
                         break
 
             # TODO: Make sure that this always matches what's inside the loop
-            if (batch_idx + 1) % self.args.gradient_accumulation_steps != 0:
-                if optimizer_step_count < max_steps:
-                    self._optimizer_step()
-                    optimizer_step_count += 1
+            if accumulated_steps > 0 and optimizer_step_count < max_steps:
+                self._optimizer_step()
+                optimizer_step_count += 1
