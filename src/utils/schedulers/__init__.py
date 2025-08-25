@@ -1,2 +1,2 @@
-from .linear_warmup_cosine_annealing_lr import LinearWarmupCosineAnnealingLR
+from .cosine_decay_with_linear_warmup_lr import CosineDecayWithLinearWarmupLR
 from .linear_warmup_lr import LinearWarmupLR
