@@ -1,3 +1,4 @@
+import math
 from typing import Optional, Callable, Any
 
 import torch
@@ -62,8 +63,34 @@ class Trainer:
             persistent_workers=self.args.dataloader_persistent_workers,
         )
 
-    def _training_step(self):
-        pass
+    def _prepare_inputs(self, inputs: dict) -> dict:
+        inputs = {
+            k: v.to(self.device) if isinstance(v, torch.Tensor) else v
+            for k, v in inputs.items()
+        }
+        return inputs
+
+    def _compute_loss(self, inputs: dict) -> torch.FloatTensor:
+        output = self.model.forward(**inputs)
+        loss = output.loss
+        return loss
+
+    def _training_step(self, inputs: dict):
+        self.model.train()
+        inputs = self._prepare_inputs(inputs)
+
+        loss = self._compute_loss(inputs)
+
+        if self.args.gradient_accumulation_steps > 1:
+            loss = loss / self.args.gradient_accumulation_steps
+
+        loss.backward()
+
+        return loss.detach()
+
+    def _optimizer_step(self):
+        self.optimizer.step()
+        self.optimizer.zero_grad(set_to_none=True)
 
     def train(self, resume_from_checkpoint: bool = False):
         if self.optimizer is None:
@@ -71,3 +98,29 @@ class Trainer:
 
         if self.train_dataloader is None:
             self.train_dataloader = self._create_train_dataloader()
+
+        num_batch_per_epoch = len(self.train_dataloader)
+        num_steps_per_epoch = math.ceil(
+            num_batch_per_epoch / self.args.gradient_accumulation_steps
+        )
+        max_steps = self.args.max_steps
+        if max_steps is None:
+            max_steps = math.ceil(self.args.num_train_epochs * num_steps_per_epoch)
+
+        optimizer_step_count = 0  # TODO: Update this when resuming from checkpoint
+        while optimizer_step_count < max_steps:
+            for batch_idx, inputs in enumerate(self.train_dataloader):
+                loss = self._training_step(inputs)
+
+                if (batch_idx + 1) % self.args.gradient_accumulation_steps == 0:
+                    self._optimizer_step()
+                    optimizer_step_count += 1
+
+                    if optimizer_step_count >= max_steps:
+                        break
+
+            # TODO: Make sure that this always matches what's inside the loop
+            if (batch_idx + 1) % self.args.gradient_accumulation_steps != 0:
+                if optimizer_step_count < max_steps:
+                    self._optimizer_step()
+                    optimizer_step_count += 1
