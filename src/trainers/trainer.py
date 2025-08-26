@@ -274,6 +274,29 @@ class Trainer:
         self._accumulated_grad_norm = 0.0
         self._grad_norm_steps = 0
 
+    def _refresh_log_metrics(self):
+        self.layout.split_column(
+            Layout(
+                Panel(self.progress, title="Overall Progress", border_style="blue"),
+                size=3,
+            ),
+            Layout(
+                Panel(
+                    self.epoch_progress,
+                    title=f"Epoch {int(self.current_epoch + 1)}",
+                    border_style="magenta",
+                ),
+                size=3,
+            ),
+            Layout(
+                Panel(
+                    self._create_metrics_table(),
+                    title="Metrics",
+                    border_style="green",
+                )
+            ),
+        )
+
     def _update_progress_and_log(
         self,
         batch_idx: int,
@@ -297,28 +320,7 @@ class Trainer:
                 (self.current_epoch, self.current_step, avg_loss, cur_lr, avg_grad_norm)
             )
 
-            self.layout.split_column(
-                Layout(
-                    Panel(self.progress, title="Overall Progress", border_style="blue"),
-                    size=3,
-                ),
-                Layout(
-                    Panel(
-                        self.epoch_progress,
-                        title=f"Epoch {int(self.current_epoch + 1)}",
-                        border_style="magenta",
-                    ),
-                    size=3,
-                ),
-                Layout(
-                    Panel(
-                        self._create_metrics_table(),
-                        title="Metrics",
-                        border_style="green",
-                    )
-                ),
-            )
-
+            self._refresh_log_metrics()
             self._reset_loss_tracking()
             self._reset_grad_norm_tracking()
 
@@ -550,12 +552,13 @@ class Trainer:
             self.scheduler = self._create_scheduler()
 
         self.progress_task = self.progress.add_task(
-            "Training...",
+            "Training",
             total=self.args.max_steps,
             completed=self.current_step,
         )
 
         self.live.start()
+        self._refresh_log_metrics()
 
         self.model.to(self.device)
 
