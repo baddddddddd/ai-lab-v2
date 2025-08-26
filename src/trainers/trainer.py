@@ -361,6 +361,10 @@ class Trainer:
         scheduler_state = torch.load(scheduler_file, weights_only=False)
         self.scheduler.load_state_dict(scheduler_state)
 
+        # hacky way to sync the scheduler and optimizer lr right away, dont hate me
+        self.scheduler.last_epoch -= 1
+        self.scheduler.step()
+
     def _save_rng_state(self, save_folder: pathlib.Path):
         rng_state_file = save_folder / Trainer.RNG_STATE_FILENAME
         rng_state = {
