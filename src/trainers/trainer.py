@@ -339,6 +339,9 @@ class Trainer:
         torch.save(optimizer_state, optimizer_file)
 
     def _load_optimizer(self, checkpoint_folder: pathlib.Path):
+        if self.optimizer is None:
+            self.optimizer = self._create_optimizer()
+
         optimizer_file = checkpoint_folder / Trainer.OPTIMIZER_FILENAME
         optimizer_state = torch.load(optimizer_file, weights_only=False)
         self.optimizer.load_state_dict(optimizer_state)
@@ -349,6 +352,9 @@ class Trainer:
         torch.save(scheduler_state, scheduler_file)
 
     def _load_scheduler(self, checkpoint_folder: pathlib.Path):
+        if self.scheduler is None:
+            self.scheduler = self._create_scheduler()
+
         scheduler_file = checkpoint_folder / Trainer.SCHEDULER_FILENAME
         scheduler_state = torch.load(scheduler_file, weights_only=False)
         self.scheduler.load_state_dict(scheduler_state)
@@ -507,6 +513,8 @@ class Trainer:
         self._load_rng_state(checkpoint_folder)
 
     def train(self, resume_from_checkpoint: str | int | bool = False):
+        self._maybe_load_checkpoint(resume_from_checkpoint)
+
         if self.train_dataloader is None:
             self.train_dataloader = self._create_train_dataloader()
 
@@ -525,8 +533,6 @@ class Trainer:
 
         if self.scheduler is None:
             self.scheduler = self._create_scheduler()
-
-        self._maybe_load_checkpoint(resume_from_checkpoint)
 
         self.progress_task = self.progress.add_task(
             "Training...", total=self.args.max_steps
