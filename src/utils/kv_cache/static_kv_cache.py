@@ -44,7 +44,7 @@ class StaticKVCacheLayer(BaseKVCacheLayer):
         self.k_cache[:, :, self.cache_ptr : self.cache_ptr + seq_len, :] = k_new
         self.v_cache[:, :, self.cache_ptr : self.cache_ptr + seq_len, :] = v_new
 
-        self.cache_ptr += 1
+        self.cache_ptr += seq_len
 
         return (
             self.k_cache[:, :, : self.cache_ptr + seq_len, :],
