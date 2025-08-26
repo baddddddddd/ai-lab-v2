@@ -1,4 +1,6 @@
 import math
+import os
+import pathlib
 from typing import Optional, Callable, Any
 
 from rich.console import Console
@@ -20,6 +22,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, IterableDataset, DataLoader
 
+from ..models import BaseModel
 from ..utils.schedulers import LinearWarmupLR
 from .training_arguments import TrainingArguments
 
@@ -27,8 +30,8 @@ from .training_arguments import TrainingArguments
 class Trainer:
     def __init__(
         self,
-        model: nn.Module,
-        args: TrainingArguments,
+        model: BaseModel | None = None,
+        args: TrainingArguments | None = None,
         data_collator: Callable | None = None,
         train_dataset: Dataset | IterableDataset | None = None,
         eval_dataset: Dataset | IterableDataset | None = None,
@@ -55,8 +58,6 @@ class Trainer:
                 if torch.cuda.is_available()
                 else torch.device("cpu")
             )
-
-        self.model.to(self.device)
 
         # logging
         self._accumulated_loss = 0.0
@@ -288,6 +289,33 @@ class Trainer:
 
         self.live.refresh()
 
+    def _save_model(self, save_folder: pathlib.Path):
+        pass
+
+    def _save_optimizer(self, save_folder: pathlib.Path):
+        pass
+
+    def _save_scheduler(self, save_folder: pathlib.Path):
+        pass
+
+    def _maybe_save(
+        self,
+        epoch_done: int,
+        optimizer_step_count: int,
+        batch_idx: int,
+    ):
+        model_folder = pathlib.Path(self.args.output_dir)
+        checkpoint_folder = model_folder / f"checkpoint-{optimizer_step_count}"
+
+        if os.path.exists(checkpoint_folder):
+            raise ValueError(f"{checkpoint_folder} already exists")
+
+        os.makedirs(checkpoint_folder, exist_ok=True)
+
+        self._save_model(checkpoint_folder)
+        self._save_optimizer(checkpoint_folder)
+        self._save_scheduler(checkpoint_folder)
+
     def train(self, resume_from_checkpoint: bool = False):
         if self.train_dataloader is None:
             self.train_dataloader = self._create_train_dataloader()
@@ -314,6 +342,8 @@ class Trainer:
 
         self.live.start()
 
+        self.model.to(self.device)
+
         try:
             optimizer_step_count = 0  # TODO: Update this when resuming from checkpoint
             epoch_done = 0  # TODO: Update this when resuming from checkpoint
@@ -333,6 +363,7 @@ class Trainer:
                     if accumulated_steps == self.args.gradient_accumulation_steps:
                         self._optimizer_step()
                         optimizer_step_count += 1
+                        accumulated_steps = 0
 
                         self._update_progress_and_log(
                             epoch_done=epoch_done,
@@ -341,7 +372,11 @@ class Trainer:
                             total_batches=num_batch_per_epoch,
                         )
 
-                        accumulated_steps = 0
+                        self._maybe_save(
+                            epoch_done=epoch_done,
+                            optimizer_step_count=optimizer_step_count,
+                            batch_idx=batch_idx,
+                        )
 
                         if optimizer_step_count >= self.args.max_steps:
                             break
@@ -349,6 +384,7 @@ class Trainer:
                 if accumulated_steps > 0 and optimizer_step_count < self.args.max_steps:
                     self._optimizer_step()
                     optimizer_step_count += 1
+                    accumulated_steps = 0
 
                     self._update_progress_and_log(
                         epoch_done=epoch_done,
@@ -357,7 +393,11 @@ class Trainer:
                         total_batches=num_batch_per_epoch,
                     )
 
-                    accumulated_steps = 0
+                    self._maybe_save(
+                        epoch_done=epoch_done,
+                        optimizer_step_count=optimizer_step_count,
+                        batch_idx=batch_idx,
+                    )
 
                 self.epoch_progress.update(
                     self.epoch_task, completed=num_batch_per_epoch

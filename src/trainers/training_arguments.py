@@ -5,7 +5,7 @@ from pathlib import Path
 class TrainingArguments:
     def __init__(
         self,
-        output_dir: os.PathLike,
+        output_dir: os.PathLike | None = None,
         train_batch_size: int = 1,
         eval_batch_size: int = 1,
         gradient_accumulation_steps: int = 1,
@@ -20,6 +20,7 @@ class TrainingArguments:
         warmup_ratio: float = 0.0,
         warmup_steps: int | None = None,
         logging_steps: int | None = None,
+        save_steps: int | None = None,
         device: str | None = None,
         dataloader_drop_last: bool = False,
         dataloader_num_workers: int = 0,
@@ -45,6 +46,7 @@ class TrainingArguments:
         self.warmup_steps = warmup_steps
 
         self.logging_steps = logging_steps
+        self.save_steps = save_steps
 
         self.device = device
 
