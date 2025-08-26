@@ -144,11 +144,7 @@ class CausalLmDataset(BaseDataset):
             self,
             batch_size=batch_size,
             collate_fn=collate_fn,
-            shuffle=shuffle,
-            num_workers=min(8, multiprocessing.cpu_count()),
-            drop_last=True,
             pin_memory=True,
-            persistent_workers=True,
         )
 
 
