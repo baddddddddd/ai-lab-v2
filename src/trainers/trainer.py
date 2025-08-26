@@ -376,6 +376,9 @@ class Trainer:
         torch.save(rng_state, rng_state_file)
 
     def _load_rng_state(self, checkpoint_folder: pathlib.Path):
+        if self.train_dataloader is None:
+            self.train_dataloader = self._create_train_dataloader()
+
         rng_state_file = checkpoint_folder / Trainer.RNG_STATE_FILENAME
         rng_state = torch.load(rng_state_file, weights_only=False)
         torch.set_rng_state(rng_state["torch_rng_state"])
