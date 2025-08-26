@@ -56,4 +56,4 @@ class BaseModel(nn.Module):
 
         save_file(self.state_dict(), model_path)
 
-        self.config.save_pretrained(save_folder)
+        self.config.save_pretrained(save_folder, overwrite=overwrite)

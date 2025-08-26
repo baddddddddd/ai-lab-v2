@@ -33,15 +33,15 @@ class BaseConfig:
         config.__dict__.update(config_dict)
         return config
 
-    def save_pretrained(self, save_directory):
+    def save_pretrained(self, save_directory: os.PathLike, overwrite: bool = False):
         save_folder = pathlib.Path(save_directory).resolve()
         os.makedirs(save_folder, exist_ok=True)
 
         json_file_path = save_folder / BaseConfig.SAVE_FILENAME
-        self.to_json_file(json_file_path)
+        self.to_json_file(json_file_path, overwrite=overwrite)
 
-    def to_json_file(self, json_file_path: str | os.PathLike):
-        if os.path.exists(json_file_path):
+    def to_json_file(self, json_file_path: str | os.PathLike, overwrite: bool = False):
+        if os.path.exists(json_file_path) and not overwrite:
             raise ValueError(f"{json_file_path} file already exists")
 
         with open(json_file_path, "w") as f:
