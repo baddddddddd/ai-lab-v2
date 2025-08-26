@@ -1,6 +1,8 @@
 import math
+import os
 import pathlib
 import random
+import re
 from typing import Optional, Callable, Any
 
 from rich.console import Console
@@ -388,7 +390,45 @@ class Trainer:
         self._save_scheduler(checkpoint_folder)
         self._save_rng_state(checkpoint_folder)
 
-    def train(self, resume_from_checkpoint: bool = False):
+    def _maybe_load_checkpoint(self, resume_from_checkpoint: str | int | bool):
+        if isinstance(resume_from_checkpoint, bool):
+            if not resume_from_checkpoint:
+                return
+
+            checkpoint_num = self._get_latest_checkpoint()
+            if checkpoint_num == -1:
+                return
+
+        elif isinstance(resume_from_checkpoint, int):
+            checkpoint_num = resume_from_checkpoint
+
+        if isinstance(resume_from_checkpoint, str):
+            checkpoint_folder = resume_from_checkpoint
+        else:
+            checkpoint_folder = self.args.output_dir / f"checkpoint-{checkpoint_num}"
+
+        self._resume_from_checkpoint(checkpoint_folder)
+
+    def _get_latest_checkpoint(self):
+        files = os.listdir(self.args.output_dir)
+
+        checkpoints = []
+        for f in files:
+            m = re.fullmatch(r"checkpoint-(\d+)", f)
+            if m:
+                checkpoints.append(int(m.group(1)))
+
+        latest_checkpoint = max(checkpoints, default=-1)
+        return latest_checkpoint
+
+    def _resume_from_checkpoint(self, checkpoint_folder: pathlib.Path):
+        self._load_training_args(checkpoint_folder)
+        self._load_model(checkpoint_folder)
+        self._load_optimizer(checkpoint_folder)
+        self._load_scheduler(checkpoint_folder)
+        self._load_rng_state(checkpoint_folder)
+
+    def train(self, resume_from_checkpoint: str | int | bool = False):
         if self.train_dataloader is None:
             self.train_dataloader = self._create_train_dataloader()
 
@@ -407,6 +447,8 @@ class Trainer:
 
         if self.scheduler is None:
             self.scheduler = self._create_scheduler()
+
+        self._maybe_load_checkpoint(resume_from_checkpoint)
 
         self.progress_task = self.progress.add_task(
             "Training...", total=self.args.max_steps
