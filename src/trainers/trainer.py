@@ -1,5 +1,6 @@
 import math
 import pathlib
+import random
 from typing import Optional, Callable, Any
 
 from rich.console import Console
@@ -16,6 +17,7 @@ from rich.table import Table
 from rich.layout import Layout
 from rich.panel import Panel
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -29,6 +31,7 @@ from .training_arguments import TrainingArguments
 class Trainer:
     OPTIMIZER_FILENAME = "optimizer.pt"
     SCHEDULER_FILENAME = "scheduler.pt"
+    RNG_STATE_FILENAME = "rng_state.pth"
 
     def __init__(
         self,
@@ -307,6 +310,22 @@ class Trainer:
         scheduler_state = self.scheduler.state_dict()
         torch.save(scheduler_state, scheduler_file)
 
+    def _save_rng_state(self, save_folder: pathlib.Path):
+        rng_state_file = save_folder / Trainer.RNG_STATE_FILENAME
+        rng_state = {
+            "torch_rng_state": torch.get_rng_state(),
+            "cuda_rng_state": torch.cuda.get_rng_state_all(),
+            "numpy_rng_state": np.random.get_state(),
+            "python_rng_state": random.getstate(),
+            "dataloader_state": (
+                self.train_dataloader.sampler.state_dict()
+                if hasattr(self.train_dataloader.sampler, "state_dict")
+                else None
+            ),
+        }
+
+        torch.save(rng_state, rng_state_file)
+
     def _maybe_save(
         self,
         epoch_done: int,
@@ -330,6 +349,7 @@ class Trainer:
         self._save_model(checkpoint_folder)
         self._save_optimizer(checkpoint_folder)
         self._save_scheduler(checkpoint_folder)
+        self._save_rng_state(checkpoint_folder)
 
     def train(self, resume_from_checkpoint: bool = False):
         if self.train_dataloader is None:
