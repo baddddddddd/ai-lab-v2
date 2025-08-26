@@ -1,3 +1,4 @@
+import itertools
 import json
 import math
 import os
@@ -72,6 +73,7 @@ class Trainer:
         # logging
         self.current_step = 0
         self.current_epoch = 0
+        self.start_batch_idx = 0
         self._accumulated_loss = 0.0
         self._loss_steps = 0
         self._accumulated_grad_norm = 0.0
@@ -416,6 +418,7 @@ class Trainer:
         trainer_state = {
             "global_step": self.current_step,
             "epoch": self.current_epoch,
+            "start_batch_idx": self.start_batch_idx,
             "max_steps": self.args.max_steps,
             "num_train_epochs": self.args.num_train_epochs,
             "log_history": log_history,
@@ -439,6 +442,7 @@ class Trainer:
 
         self.current_step = trainer_state["global_step"]
         self.current_epoch = trainer_state["epoch"]
+        self.start_batch_idx = trainer_state["start_batch_idx"]
 
         for log_entry in trainer_state["log_history"]:
             self.metrics_data.append(
@@ -460,6 +464,10 @@ class Trainer:
             or self.current_step % self.args.save_steps != 0
         ):
             return
+
+        self.start_batch_idx = batch_idx + 1
+        if self.start_batch_idx >= len(self.train_dataloader):
+            self.start_batch_idx = 0
 
         model_folder = pathlib.Path(self.args.output_dir)
         checkpoint_folder = model_folder / f"checkpoint-{self.current_step}"
@@ -538,7 +546,9 @@ class Trainer:
             self.scheduler = self._create_scheduler()
 
         self.progress_task = self.progress.add_task(
-            "Training...", total=self.args.max_steps
+            "Training...",
+            total=self.args.max_steps,
+            completed=self.current_step,
         )
 
         self.live.start()
@@ -550,10 +560,19 @@ class Trainer:
 
             while self.current_step < self.args.max_steps:
                 self.epoch_task = self.epoch_progress.add_task(
-                    f"Epoch {int(self.current_epoch + 1)}", total=num_batch_per_epoch
+                    f"Epoch {int(self.current_epoch + 1)}",
+                    total=num_batch_per_epoch,
+                    completed=self.start_batch_idx,
                 )
 
-                for batch_idx, inputs in enumerate(self.train_dataloader):
+                dataloader_iter = iter(self.train_dataloader)
+                for _ in range(self.start_batch_idx):
+                    next(dataloader_iter)
+
+                for batch_idx, inputs in enumerate(
+                    dataloader_iter, start=self.start_batch_idx
+                ):
+
                     loss = self._training_step(inputs)
                     accumulated_steps += 1
 
@@ -596,6 +615,7 @@ class Trainer:
                         batch_idx=batch_idx,
                     )
 
+                self.start_batch_idx = 0
                 self.epoch_progress.update(
                     self.epoch_task, completed=num_batch_per_epoch
                 )
