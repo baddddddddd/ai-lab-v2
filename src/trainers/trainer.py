@@ -27,6 +27,9 @@ from .training_arguments import TrainingArguments
 
 
 class Trainer:
+    OPTIMIZER_FILENAME = "optimizer.pt"
+    SCHEDULER_FILENAME = "scheduler.pt"
+
     def __init__(
         self,
         model: BaseModel | None = None,
@@ -295,10 +298,14 @@ class Trainer:
         )
 
     def _save_optimizer(self, save_folder: pathlib.Path):
-        pass
+        optimizer_file = save_folder / Trainer.OPTIMIZER_FILENAME
+        optimizer_state = self.optimizer.state_dict()
+        torch.save(optimizer_state, optimizer_file)
 
     def _save_scheduler(self, save_folder: pathlib.Path):
-        pass
+        scheduler_file = save_folder / Trainer.SCHEDULER_FILENAME
+        scheduler_state = self.scheduler.state_dict()
+        torch.save(scheduler_state, scheduler_file)
 
     def _maybe_save(
         self,
@@ -306,6 +313,12 @@ class Trainer:
         optimizer_step_count: int,
         batch_idx: int,
     ):
+        if (
+            self.args.save_steps is None
+            or optimizer_step_count % self.args.save_steps != 0
+        ):
+            return
+
         model_folder = pathlib.Path(self.args.output_dir)
         checkpoint_folder = model_folder / f"checkpoint-{optimizer_step_count}"
 
