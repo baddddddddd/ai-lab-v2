@@ -78,12 +78,31 @@ class Trainer:
             expand=True,
         )
 
+        self.epoch_progress = Progress(
+            TextColumn("[bold magenta]Epoch", justify="right"),
+            BarColumn(bar_width=None),
+            "[progress.percentage]{task.percentage:>3.1f}%",
+            "•",
+            TextColumn("[bold yellow]{task.completed}/{task.total} batches"),
+            console=self.console,
+            expand=True,
+        )
+
         self.metrics_data = []
-        self.max_table_rows = 5
+        self.max_table_rows = 20
 
         self.layout = Layout()
         self.layout.split_column(
-            Layout(Panel(self.progress, title="Progress", border_style="blue"), size=3),
+            Layout(
+                Panel(self.progress, title="Overall Progress", border_style="blue"),
+                size=3,
+            ),
+            Layout(
+                Panel(
+                    self.epoch_progress, title="Current Epoch", border_style="magenta"
+                ),
+                size=3,
+            ),
             Layout(
                 Panel(
                     self._create_metrics_table(), title="Metrics", border_style="green"
@@ -93,6 +112,7 @@ class Trainer:
 
         self.live = Live(self.layout, console=self.console, auto_refresh=False)
         self.progress_task: Optional[TaskID] = None
+        self.epoch_task: Optional[TaskID] = None
 
     def _create_metrics_table(self) -> Table:
         table = Table(show_header=True, title="Training Metrics")
@@ -224,10 +244,15 @@ class Trainer:
         self,
         epoch_done: int,
         optimizer_step_count: int,
+        batch_idx: int,
+        total_batches: int,
     ):
         self.progress.update(self.progress_task, advance=1)
+        self.epoch_progress.update(self.epoch_task, completed=batch_idx + 1)
 
-        if optimizer_step_count % self.args.logging_steps == 0:
+        should_log_metrics = optimizer_step_count % self.args.logging_steps == 0
+
+        if should_log_metrics:
             avg_loss = (
                 self._accumulated_loss
                 / self._loss_steps
@@ -239,7 +264,16 @@ class Trainer:
 
             self.layout.split_column(
                 Layout(
-                    Panel(self.progress, title="Progress", border_style="blue"), size=3
+                    Panel(self.progress, title="Overall Progress", border_style="blue"),
+                    size=3,
+                ),
+                Layout(
+                    Panel(
+                        self.epoch_progress,
+                        title=f"Epoch {epoch_done + 1}",
+                        border_style="magenta",
+                    ),
+                    size=3,
                 ),
                 Layout(
                     Panel(
@@ -286,6 +320,10 @@ class Trainer:
             accumulated_steps = 0
 
             while optimizer_step_count < self.args.max_steps:
+                self.epoch_task = self.epoch_progress.add_task(
+                    f"Epoch {epoch_done + 1}", total=num_batch_per_epoch
+                )
+
                 for batch_idx, inputs in enumerate(self.train_dataloader):
                     loss = self._training_step(inputs)
                     accumulated_steps += 1
@@ -299,6 +337,8 @@ class Trainer:
                         self._update_progress_and_log(
                             epoch_done=epoch_done,
                             optimizer_step_count=optimizer_step_count,
+                            batch_idx=batch_idx,
+                            total_batches=num_batch_per_epoch,
                         )
 
                         accumulated_steps = 0
@@ -313,9 +353,16 @@ class Trainer:
                     self._update_progress_and_log(
                         epoch_done=epoch_done,
                         optimizer_step_count=optimizer_step_count,
+                        batch_idx=batch_idx,
+                        total_batches=num_batch_per_epoch,
                     )
 
                     accumulated_steps = 0
+
+                self.epoch_progress.update(
+                    self.epoch_task, completed=num_batch_per_epoch
+                )
+                self.epoch_progress.remove_task(self.epoch_task)
 
                 epoch_done += 1
 
