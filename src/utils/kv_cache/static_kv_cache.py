@@ -47,8 +47,8 @@ class StaticKVCacheLayer(BaseKVCacheLayer):
         self.cache_ptr += seq_len
 
         return (
-            self.k_cache[:, :, : self.cache_ptr + seq_len, :],
-            self.v_cache[:, :, : self.cache_ptr + seq_len, :],
+            self.k_cache[:, :, : self.cache_ptr, :],
+            self.v_cache[:, :, : self.cache_ptr, :],
         )
 
     def get_seq_length(self):
