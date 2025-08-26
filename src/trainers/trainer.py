@@ -301,15 +301,30 @@ class Trainer:
             overwrite=self.args.overwrite_output_dir,
         )
 
+    def _load_model(self, checkpoint_folder: pathlib.Path):
+        self.model = self.model.from_pretrained(
+            checkpoint_folder, device_map=self.device
+        )
+
     def _save_optimizer(self, save_folder: pathlib.Path):
         optimizer_file = save_folder / Trainer.OPTIMIZER_FILENAME
         optimizer_state = self.optimizer.state_dict()
         torch.save(optimizer_state, optimizer_file)
 
+    def _load_optimizer(self, checkpoint_folder: pathlib.Path):
+        optimizer_file = checkpoint_folder / Trainer.OPTIMIZER_FILENAME
+        optimizer_state = torch.load(optimizer_file, weights_only=False)
+        self.optimizer.load_state_dict(optimizer_state)
+
     def _save_scheduler(self, save_folder: pathlib.Path):
         scheduler_file = save_folder / Trainer.SCHEDULER_FILENAME
         scheduler_state = self.scheduler.state_dict()
         torch.save(scheduler_state, scheduler_file)
+
+    def _load_scheduler(self, checkpoint_folder: pathlib.Path):
+        scheduler_file = checkpoint_folder / Trainer.SCHEDULER_FILENAME
+        scheduler_state = torch.load(scheduler_file, weights_only=False)
+        self.scheduler.load_state_dict(scheduler_state)
 
     def _save_rng_state(self, save_folder: pathlib.Path):
         rng_state_file = save_folder / Trainer.RNG_STATE_FILENAME
@@ -327,9 +342,25 @@ class Trainer:
 
         torch.save(rng_state, rng_state_file)
 
+    def _load_rng_state(self, checkpoint_folder: pathlib.Path):
+        rng_state_file = checkpoint_folder / Trainer.RNG_STATE_FILENAME
+        rng_state = torch.load(rng_state_file, weights_only=False)
+        torch.set_rng_state(rng_state["torch_rng_state"])
+        torch.cuda.set_rng_state_all(rng_state["cuda_rng_state"])
+        np.random.set_state(rng_state["numpy_rng_state"])
+        random.setstate(rng_state["python_rng_state"])
+        if rng_state["dataloader_state"] and hasattr(
+            self.train_dataloader.sampler, "load_state_dict"
+        ):
+            self.train_dataloader.sampler.load_state_dict(rng_state["dataloader_state"])
+
     def _save_training_args(self, save_folder: pathlib.Path):
         training_args_file = save_folder / Trainer.TRAINING_ARGS_FILENAME
         torch.save(self.args, training_args_file)
+
+    def _load_training_args(self, checkpoint_folder: pathlib.Path):
+        training_args_file = checkpoint_folder / Trainer.TRAINING_ARGS_FILENAME
+        self.args = torch.load(training_args_file, weights_only=False)
 
     def _maybe_save(
         self,
