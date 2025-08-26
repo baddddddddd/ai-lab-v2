@@ -29,6 +29,7 @@ from .training_arguments import TrainingArguments
 
 
 class Trainer:
+    TRAINING_ARGS_FILENAME = "training_args.bin"
     OPTIMIZER_FILENAME = "optimizer.pt"
     SCHEDULER_FILENAME = "scheduler.pt"
     RNG_STATE_FILENAME = "rng_state.pth"
@@ -326,6 +327,10 @@ class Trainer:
 
         torch.save(rng_state, rng_state_file)
 
+    def _save_training_args(self, save_folder: pathlib.Path):
+        training_args_file = save_folder / Trainer.TRAINING_ARGS_FILENAME
+        torch.save(self.args, training_args_file)
+
     def _maybe_save(
         self,
         epoch_done: int,
@@ -346,6 +351,7 @@ class Trainer:
 
         checkpoint_folder.mkdir(parents=True, exist_ok=True)
 
+        self._save_training_args(checkpoint_folder)
         self._save_model(checkpoint_folder)
         self._save_optimizer(checkpoint_folder)
         self._save_scheduler(checkpoint_folder)
