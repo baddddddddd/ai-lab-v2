@@ -6,6 +6,7 @@ class TrainingArguments:
     def __init__(
         self,
         output_dir: os.PathLike | None = None,
+        overwrite_output_dir: bool = False,
         train_batch_size: int = 1,
         eval_batch_size: int = 1,
         gradient_accumulation_steps: int = 1,
@@ -29,6 +30,8 @@ class TrainingArguments:
         dataloader_persistent_workers: bool = False,
     ):
         self.output_dir = Path(output_dir)
+        self.overwrite_output_dir = overwrite_output_dir
+
         self.train_batch_size = train_batch_size
         self.eval_batch_size = eval_batch_size
         self.gradient_accumulation_steps = gradient_accumulation_steps

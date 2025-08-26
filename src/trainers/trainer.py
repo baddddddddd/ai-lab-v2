@@ -1,5 +1,4 @@
 import math
-import os
 import pathlib
 from typing import Optional, Callable, Any
 
@@ -290,7 +289,10 @@ class Trainer:
         self.live.refresh()
 
     def _save_model(self, save_folder: pathlib.Path):
-        pass
+        self.model.save_pretrained(
+            save_directory=save_folder,
+            overwrite=self.args.overwrite_output_dir,
+        )
 
     def _save_optimizer(self, save_folder: pathlib.Path):
         pass
@@ -307,10 +309,10 @@ class Trainer:
         model_folder = pathlib.Path(self.args.output_dir)
         checkpoint_folder = model_folder / f"checkpoint-{optimizer_step_count}"
 
-        if os.path.exists(checkpoint_folder):
+        if checkpoint_folder.exists() and not self.args.overwrite_output_dir:
             raise ValueError(f"{checkpoint_folder} already exists")
 
-        os.makedirs(checkpoint_folder, exist_ok=True)
+        checkpoint_folder.mkdir(parents=True, exist_ok=True)
 
         self._save_model(checkpoint_folder)
         self._save_optimizer(checkpoint_folder)
