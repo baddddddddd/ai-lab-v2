@@ -28,6 +28,7 @@ class TrainingArguments:
         dataloader_prefetch_factor: int | None = None,
         dataloader_pin_memory: bool = True,
         dataloader_persistent_workers: bool = False,
+        fp16: bool = False,
     ):
         self.output_dir = Path(output_dir)
         self.overwrite_output_dir = overwrite_output_dir
@@ -58,3 +59,5 @@ class TrainingArguments:
         self.dataloader_prefetch_factor = dataloader_prefetch_factor
         self.dataloader_pin_memory = dataloader_pin_memory
         self.dataloader_persistent_workers = dataloader_persistent_workers
+
+        self.fp16 = fp16

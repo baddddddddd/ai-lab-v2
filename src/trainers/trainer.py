@@ -38,6 +38,7 @@ class Trainer:
     OPTIMIZER_FILENAME = "optimizer.pt"
     SCHEDULER_FILENAME = "scheduler.pt"
     RNG_STATE_FILENAME = "rng_state.pth"
+    SCALER_FILENAME = "scaler.pt"
 
     def __init__(
         self,
@@ -69,6 +70,12 @@ class Trainer:
                 if torch.cuda.is_available()
                 else torch.device("cpu")
             )
+
+        self.scaler = None
+        if self.args.fp16:
+            if not torch.cuda.is_available():
+                raise ValueError("FP16 training requires CUDA")
+            self.scaler = torch.cuda.amp.GradScaler()
 
         # logging
         self.current_step = 0
@@ -229,8 +236,13 @@ class Trainer:
         return inputs
 
     def _compute_loss(self, inputs: dict) -> torch.FloatTensor:
-        output = self.model.forward(**inputs)
-        loss = output.loss
+        if self.args.fp16:
+            with torch.cuda.amp.autocast():
+                output = self.model.forward(**inputs)
+                loss = output.loss
+        else:
+            output = self.model.forward(**inputs)
+            loss = output.loss
         return loss
 
     def _training_step(self, inputs: dict):
@@ -242,18 +254,30 @@ class Trainer:
         if self.args.gradient_accumulation_steps > 1:
             loss = loss / self.args.gradient_accumulation_steps
 
-        loss.backward()
+        if self.args.fp16:
+            self.scaler.scale(loss).backward()
+        else:
+            loss.backward()
 
         return loss.detach()
 
     def _optimizer_step(self):
-        grad_norm = torch.nn.utils.clip_grad_norm_(
-            self.model.parameters(), max_norm=self.args.max_grad_norm
-        )
+        if self.args.fp16:
+            self.scaler.unscale_(self.optimizer)
 
-        self.optimizer.step()
+            grad_norm = torch.nn.utils.clip_grad_norm_(
+                self.model.parameters(), max_norm=self.args.max_grad_norm
+            )
+
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
+        else:
+            grad_norm = torch.nn.utils.clip_grad_norm_(
+                self.model.parameters(), max_norm=self.args.max_grad_norm
+            )
+            self.optimizer.step()
+
         self.optimizer.zero_grad(set_to_none=True)
-
         self.scheduler.step()
 
         return grad_norm.item()
@@ -366,6 +390,22 @@ class Trainer:
         # hacky way to sync the scheduler and optimizer lr right away, dont hate me
         self.scheduler.last_epoch -= 1
         self.scheduler.step()
+
+    def _save_scaler(self, save_folder: pathlib.Path):
+        if self.args.fp16 and self.scaler is not None:
+            scaler_file = save_folder / Trainer.SCALER_FILENAME
+            scaler_state = self.scaler.state_dict()
+            torch.save(scaler_state, scaler_file)
+
+    def _load_scaler(self, checkpoint_folder: pathlib.Path):
+        if self.args.fp16:
+            if self.scaler is None:
+                self.scaler = torch.cuda.amp.GradScaler()
+
+            scaler_file = checkpoint_folder / Trainer.SCALER_FILENAME
+            if scaler_file.exists():
+                scaler_state = torch.load(scaler_file, weights_only=False)
+                self.scaler.load_state_dict(scaler_state)
 
     def _save_rng_state(self, save_folder: pathlib.Path):
         rng_state_file = save_folder / Trainer.RNG_STATE_FILENAME
@@ -488,6 +528,7 @@ class Trainer:
         self._save_model(checkpoint_folder)
         self._save_optimizer(checkpoint_folder)
         self._save_scheduler(checkpoint_folder)
+        self._save_scaler(checkpoint_folder)
         self._save_rng_state(checkpoint_folder)
 
     def _maybe_load_checkpoint(self, resume_from_checkpoint: str | int | bool):
@@ -527,6 +568,7 @@ class Trainer:
         self._load_model(checkpoint_folder)
         self._load_optimizer(checkpoint_folder)
         self._load_scheduler(checkpoint_folder)
+        self._load_scaler(checkpoint_folder)
         self._load_rng_state(checkpoint_folder)
 
     def train(self, resume_from_checkpoint: str | int | bool = False):
