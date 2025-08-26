@@ -1,3 +1,4 @@
+import json
 import math
 import os
 import pathlib
@@ -31,6 +32,7 @@ from .training_arguments import TrainingArguments
 
 
 class Trainer:
+    TRAINER_STATE_FILENAME = "trainer_state.json"
     TRAINING_ARGS_FILENAME = "training_args.bin"
     OPTIMIZER_FILENAME = "optimizer.pt"
     SCHEDULER_FILENAME = "scheduler.pt"
@@ -68,6 +70,8 @@ class Trainer:
             )
 
         # logging
+        self.current_step = 0
+        self.current_epoch = 0
         self._accumulated_loss = 0.0
         self._loss_steps = 0
         self._accumulated_grad_norm = 0.0
@@ -138,7 +142,11 @@ class Trainer:
         )
         for epoch, step, loss, lr, grad_norm in recent_data:
             table.add_row(
-                str(epoch), str(step), f"{loss:.6f}", f"{lr:.4e}", f"{grad_norm:.6f}"
+                f"{epoch:.2f}",
+                str(step),
+                f"{loss:.6f}",
+                f"{lr:.4e}",
+                f"{grad_norm:.6f}",
             )
 
         return table
@@ -266,15 +274,13 @@ class Trainer:
 
     def _update_progress_and_log(
         self,
-        epoch_done: int,
-        optimizer_step_count: int,
         batch_idx: int,
         total_batches: int,
     ):
         self.progress.update(self.progress_task, advance=1)
         self.epoch_progress.update(self.epoch_task, completed=batch_idx + 1)
 
-        should_log_metrics = optimizer_step_count % self.args.logging_steps == 0
+        should_log_metrics = self.current_step % self.args.logging_steps == 0
 
         if should_log_metrics:
             avg_loss = (
@@ -286,7 +292,7 @@ class Trainer:
             cur_lr = self.scheduler.get_last_lr()[0]
 
             self.metrics_data.append(
-                (epoch_done, optimizer_step_count, avg_loss, cur_lr, avg_grad_norm)
+                (self.current_epoch, self.current_step, avg_loss, cur_lr, avg_grad_norm)
             )
 
             self.layout.split_column(
@@ -297,7 +303,7 @@ class Trainer:
                 Layout(
                     Panel(
                         self.epoch_progress,
-                        title=f"Epoch {epoch_done + 1}",
+                        title=f"Epoch {int(self.current_epoch + 1)}",
                         border_style="magenta",
                     ),
                     size=3,
@@ -383,26 +389,78 @@ class Trainer:
         training_args_file = checkpoint_folder / Trainer.TRAINING_ARGS_FILENAME
         self.args = torch.load(training_args_file, weights_only=False)
 
+    def _save_trainer_state(self, save_folder: pathlib.Path):
+        trainer_state_file = save_folder / Trainer.TRAINER_STATE_FILENAME
+
+        log_history = []
+        for epoch, step, loss, lr, grad_norm in self.metrics_data:
+            log_history.append(
+                {
+                    "epoch": epoch,
+                    "step": step,
+                    "train_loss": loss,
+                    "learning_rate": lr,
+                    "grad_norm": grad_norm,
+                }
+            )
+
+        trainer_state = {
+            "global_step": self.current_step,
+            "epoch": self.current_epoch,
+            "max_steps": self.args.max_steps,
+            "num_train_epochs": self.args.num_train_epochs,
+            "log_history": log_history,
+            # "total_flos": 0,
+            # "best_metric": None,
+            # "best_model_checkpoint": None,
+            # "trial_name": None,
+            # "trial_params": None,
+            # "is_local_process_zero": True,
+            # "is_world_process_zero": True,
+        }
+
+        with open(trainer_state_file, "w") as f:
+            json.dump(trainer_state, f, indent=2)
+
+    def _load_trainer_state(self, checkpoint_folder: pathlib.Path):
+        trainer_state_file = checkpoint_folder / Trainer.TRAINER_STATE_FILENAME
+
+        with open(trainer_state_file, "r") as f:
+            trainer_state = json.load(f)
+
+        self.current_step = trainer_state["global_step"]
+        self.current_epoch = trainer_state["epoch"]
+
+        for log_entry in trainer_state["log_history"]:
+            self.metrics_data.append(
+                [
+                    log_entry["epoch"],
+                    log_entry["step"],
+                    log_entry["train_loss"],
+                    log_entry["learning_rate"],
+                    log_entry["grad_norm"],
+                ]
+            )
+
     def _maybe_save(
         self,
-        epoch_done: int,
-        optimizer_step_count: int,
         batch_idx: int,
     ):
         if (
             self.args.save_steps is None
-            or optimizer_step_count % self.args.save_steps != 0
+            or self.current_step % self.args.save_steps != 0
         ):
             return
 
         model_folder = pathlib.Path(self.args.output_dir)
-        checkpoint_folder = model_folder / f"checkpoint-{optimizer_step_count}"
+        checkpoint_folder = model_folder / f"checkpoint-{self.current_step}"
 
         if checkpoint_folder.exists() and not self.args.overwrite_output_dir:
             raise ValueError(f"{checkpoint_folder} already exists")
 
         checkpoint_folder.mkdir(parents=True, exist_ok=True)
 
+        self._save_trainer_state(checkpoint_folder)
         self._save_training_args(checkpoint_folder)
         self._save_model(checkpoint_folder)
         self._save_optimizer(checkpoint_folder)
@@ -441,6 +499,7 @@ class Trainer:
         return latest_checkpoint
 
     def _resume_from_checkpoint(self, checkpoint_folder: pathlib.Path):
+        self._load_trainer_state(checkpoint_folder)
         self._load_training_args(checkpoint_folder)
         self._load_model(checkpoint_folder)
         self._load_optimizer(checkpoint_folder)
@@ -478,13 +537,11 @@ class Trainer:
         self.model.to(self.device)
 
         try:
-            optimizer_step_count = 0  # TODO: Update this when resuming from checkpoint
-            epoch_done = 0  # TODO: Update this when resuming from checkpoint
             accumulated_steps = 0
 
-            while optimizer_step_count < self.args.max_steps:
+            while self.current_step < self.args.max_steps:
                 self.epoch_task = self.epoch_progress.add_task(
-                    f"Epoch {epoch_done + 1}", total=num_batch_per_epoch
+                    f"Epoch {int(self.current_epoch + 1)}", total=num_batch_per_epoch
                 )
 
                 for batch_idx, inputs in enumerate(self.train_dataloader):
@@ -497,42 +554,36 @@ class Trainer:
                         grad_norm = self._optimizer_step()
                         self._update_grad_norm_tracking(grad_norm)
 
-                        optimizer_step_count += 1
+                        self.current_step += 1
+                        self.current_epoch = self.current_step / num_steps_per_epoch
                         accumulated_steps = 0
 
                         self._update_progress_and_log(
-                            epoch_done=epoch_done,
-                            optimizer_step_count=optimizer_step_count,
                             batch_idx=batch_idx,
                             total_batches=num_batch_per_epoch,
                         )
 
                         self._maybe_save(
-                            epoch_done=epoch_done,
-                            optimizer_step_count=optimizer_step_count,
                             batch_idx=batch_idx,
                         )
 
-                        if optimizer_step_count >= self.args.max_steps:
+                        if self.current_step >= self.args.max_steps:
                             break
 
-                if accumulated_steps > 0 and optimizer_step_count < self.args.max_steps:
+                if accumulated_steps > 0 and self.current_step < self.args.max_steps:
                     grad_norm = self._optimizer_step()
                     self._update_grad_norm_tracking(grad_norm)
 
-                    optimizer_step_count += 1
+                    self.current_step += 1
+                    self.current_epoch = self.current_step / num_steps_per_epoch
                     accumulated_steps = 0
 
                     self._update_progress_and_log(
-                        epoch_done=epoch_done,
-                        optimizer_step_count=optimizer_step_count,
                         batch_idx=batch_idx,
                         total_batches=num_batch_per_epoch,
                     )
 
                     self._maybe_save(
-                        epoch_done=epoch_done,
-                        optimizer_step_count=optimizer_step_count,
                         batch_idx=batch_idx,
                     )
 
@@ -541,11 +592,9 @@ class Trainer:
                 )
                 self.epoch_progress.remove_task(self.epoch_task)
 
-                epoch_done += 1
-
         finally:
             self.live.stop()
 
         self.console.print("\n[bold green]Training completed![/bold green]")
-        self.console.print(f"[cyan]Total steps:[/cyan] {optimizer_step_count}")
-        self.console.print(f"[cyan]Epochs completed:[/cyan] {epoch_done}")
+        self.console.print(f"[cyan]Total steps:[/cyan] {self.current_step}")
+        self.console.print(f"[cyan]Epochs completed:[/cyan] {self.current_epoch}")
