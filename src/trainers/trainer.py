@@ -70,6 +70,8 @@ class Trainer:
         # logging
         self._accumulated_loss = 0.0
         self._loss_steps = 0
+        self._accumulated_grad_norm = 0.0
+        self._grad_norm_steps = 0
 
         self.console = Console()
 
@@ -125,15 +127,19 @@ class Trainer:
 
     def _create_metrics_table(self) -> Table:
         table = Table(show_header=True, title="Training Metrics")
+        table.add_column("Epoch", justify="right", style="blue")
         table.add_column("Step", justify="right", style="cyan")
         table.add_column("Training Loss", justify="right", style="magenta")
         table.add_column("Learning Rate", justify="right", style="yellow")
+        table.add_column("Gradient Norm", justify="right", style="green")
 
         recent_data = (
             self.metrics_data[-self.max_table_rows :] if self.metrics_data else []
         )
-        for step, loss, lr in recent_data:
-            table.add_row(str(step), f"{loss:.6f}", f"{lr:.4e}")
+        for epoch, step, loss, lr, grad_norm in recent_data:
+            table.add_row(
+                str(epoch), str(step), f"{loss:.6f}", f"{lr:.4e}", f"{grad_norm:.6f}"
+            )
 
         return table
 
@@ -231,23 +237,32 @@ class Trainer:
         return loss.detach()
 
     def _optimizer_step(self):
-        if self.args.max_grad_norm > 0.0:
-            torch.nn.utils.clip_grad_norm_(
-                self.model.parameters(), max_norm=self.args.max_grad_norm
-            )
+        grad_norm = torch.nn.utils.clip_grad_norm_(
+            self.model.parameters(), max_norm=self.args.max_grad_norm
+        )
 
         self.optimizer.step()
         self.optimizer.zero_grad(set_to_none=True)
 
         self.scheduler.step()
 
+        return grad_norm.item()
+
     def _update_loss_tracking(self, loss: torch.Tensor):
         self._accumulated_loss += loss.item()
         self._loss_steps += 1
 
+    def _update_grad_norm_tracking(self, grad_norm: float):
+        self._accumulated_grad_norm += grad_norm
+        self._grad_norm_steps += 1
+
     def _reset_loss_tracking(self):
         self._accumulated_loss = 0.0
         self._loss_steps = 0
+
+    def _reset_grad_norm_tracking(self):
+        self._accumulated_grad_norm = 0.0
+        self._grad_norm_steps = 0
 
     def _update_progress_and_log(
         self,
@@ -267,9 +282,12 @@ class Trainer:
                 / self._loss_steps
                 * self.args.gradient_accumulation_steps
             )
+            avg_grad_norm = self._accumulated_grad_norm / self._grad_norm_steps
             cur_lr = self.scheduler.get_last_lr()[0]
 
-            self.metrics_data.append((optimizer_step_count, avg_loss, cur_lr))
+            self.metrics_data.append(
+                (epoch_done, optimizer_step_count, avg_loss, cur_lr, avg_grad_norm)
+            )
 
             self.layout.split_column(
                 Layout(
@@ -294,6 +312,7 @@ class Trainer:
             )
 
             self._reset_loss_tracking()
+            self._reset_grad_norm_tracking()
 
         self.live.refresh()
 
@@ -475,7 +494,9 @@ class Trainer:
                     self._update_loss_tracking(loss)
 
                     if accumulated_steps == self.args.gradient_accumulation_steps:
-                        self._optimizer_step()
+                        grad_norm = self._optimizer_step()
+                        self._update_grad_norm_tracking(grad_norm)
+
                         optimizer_step_count += 1
                         accumulated_steps = 0
 
@@ -496,7 +517,9 @@ class Trainer:
                             break
 
                 if accumulated_steps > 0 and optimizer_step_count < self.args.max_steps:
-                    self._optimizer_step()
+                    grad_norm = self._optimizer_step()
+                    self._update_grad_norm_tracking(grad_norm)
+
                     optimizer_step_count += 1
                     accumulated_steps = 0
 
