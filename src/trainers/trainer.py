@@ -3,7 +3,17 @@ from typing import Optional, Callable, Any
 
 from rich.console import Console
 from rich.live import Live
+from rich.progress import (
+    Progress,
+    TaskID,
+    BarColumn,
+    TextColumn,
+    TimeRemainingColumn,
+    TimeElapsedColumn,
+)
 from rich.table import Table
+from rich.layout import Layout
+from rich.panel import Panel
 
 import torch
 import torch.nn as nn
@@ -53,11 +63,50 @@ class Trainer:
         self._loss_steps = 0
 
         self.console = Console()
-        self.table = Table(show_header=True)
-        self.table.add_column("Step", justify="right")
-        self.table.add_column("Training Loss", justify="right")
-        self.table.add_column("Learning Rate", justify="right")
-        self.live = Live(self.table, console=self.console, auto_refresh=False)
+
+        self.progress = Progress(
+            TextColumn("[bold blue]Training", justify="right"),
+            BarColumn(bar_width=None),
+            "[progress.percentage]{task.percentage:>3.1f}%",
+            "•",
+            TextColumn("[bold green]{task.completed}/{task.total} steps"),
+            "•",
+            TimeElapsedColumn(),
+            "•",
+            TimeRemainingColumn(),
+            console=self.console,
+            expand=True,
+        )
+
+        self.metrics_data = []
+        self.max_table_rows = 5
+
+        self.layout = Layout()
+        self.layout.split_column(
+            Layout(Panel(self.progress, title="Progress", border_style="blue"), size=3),
+            Layout(
+                Panel(
+                    self._create_metrics_table(), title="Metrics", border_style="green"
+                )
+            ),
+        )
+
+        self.live = Live(self.layout, console=self.console, auto_refresh=False)
+        self.progress_task: Optional[TaskID] = None
+
+    def _create_metrics_table(self) -> Table:
+        table = Table(show_header=True, title="Training Metrics")
+        table.add_column("Step", justify="right", style="cyan")
+        table.add_column("Training Loss", justify="right", style="magenta")
+        table.add_column("Learning Rate", justify="right", style="yellow")
+
+        recent_data = (
+            self.metrics_data[-self.max_table_rows :] if self.metrics_data else []
+        )
+        for step, loss, lr in recent_data:
+            table.add_row(str(step), f"{loss:.6f}", f"{lr:.4e}")
+
+        return table
 
     def get_optimizer(self):
         if self.optimizer is None:
@@ -167,7 +216,7 @@ class Trainer:
         self._accumulated_loss += loss.item()
         self._loss_steps += 1
 
-    def _reset_loss_tracking(self, loss: torch.Tensor):
+    def _reset_loss_tracking(self):
         self._accumulated_loss = 0.0
         self._loss_steps = 0
 
@@ -176,19 +225,33 @@ class Trainer:
         epoch_done: int,
         optimizer_step_count: int,
     ):
-        if optimizer_step_count % self.args.logging_steps != 0:
-            return
+        self.progress.update(self.progress_task, advance=1)
 
-        avg_loss = (
-            self._accumulated_loss
-            / self._loss_steps
-            * self.args.gradient_accumulation_steps
-        )
-        cur_lr = self.scheduler.get_last_lr()[0]
+        if optimizer_step_count % self.args.logging_steps == 0:
+            avg_loss = (
+                self._accumulated_loss
+                / self._loss_steps
+                * self.args.gradient_accumulation_steps
+            )
+            cur_lr = self.scheduler.get_last_lr()[0]
 
-        self.table.add_row(
-            str(optimizer_step_count), f"{avg_loss:.6f}", f"{cur_lr:.4e}"
-        )
+            self.metrics_data.append((optimizer_step_count, avg_loss, cur_lr))
+
+            self.layout.split_column(
+                Layout(
+                    Panel(self.progress, title="Progress", border_style="blue"), size=3
+                ),
+                Layout(
+                    Panel(
+                        self._create_metrics_table(),
+                        title="Metrics",
+                        border_style="green",
+                    )
+                ),
+            )
+
+            self._reset_loss_tracking()
+
         self.live.refresh()
 
     def train(self, resume_from_checkpoint: bool = False):
@@ -211,19 +274,39 @@ class Trainer:
         if self.scheduler is None:
             self.scheduler = self._create_scheduler()
 
+        self.progress_task = self.progress.add_task(
+            "Training...", total=self.args.max_steps
+        )
+
         self.live.start()
 
-        optimizer_step_count = 0  # TODO: Update this when resuming from checkpoint
-        epoch_done = 0  # TODO: Update this when resuming from checkpoint
-        accumulated_steps = 0
-        while optimizer_step_count < self.args.max_steps:
-            for batch_idx, inputs in enumerate(self.train_dataloader):
-                loss = self._training_step(inputs)
-                accumulated_steps += 1
+        try:
+            optimizer_step_count = 0  # TODO: Update this when resuming from checkpoint
+            epoch_done = 0  # TODO: Update this when resuming from checkpoint
+            accumulated_steps = 0
 
-                self._update_loss_tracking(loss)
+            while optimizer_step_count < self.args.max_steps:
+                for batch_idx, inputs in enumerate(self.train_dataloader):
+                    loss = self._training_step(inputs)
+                    accumulated_steps += 1
 
-                if accumulated_steps == self.args.gradient_accumulation_steps:
+                    self._update_loss_tracking(loss)
+
+                    if accumulated_steps == self.args.gradient_accumulation_steps:
+                        self._optimizer_step()
+                        optimizer_step_count += 1
+
+                        self._update_progress_and_log(
+                            epoch_done=epoch_done,
+                            optimizer_step_count=optimizer_step_count,
+                        )
+
+                        accumulated_steps = 0
+
+                        if optimizer_step_count >= self.args.max_steps:
+                            break
+
+                if accumulated_steps > 0 and optimizer_step_count < self.args.max_steps:
                     self._optimizer_step()
                     optimizer_step_count += 1
 
@@ -234,21 +317,11 @@ class Trainer:
 
                     accumulated_steps = 0
 
-                    if optimizer_step_count >= self.args.max_steps:
-                        break
+                epoch_done += 1
 
-            # TODO: Make sure that this always matches what's inside the loop
-            if accumulated_steps > 0 and optimizer_step_count < self.args.max_steps:
-                self._optimizer_step()
-                optimizer_step_count += 1
+        finally:
+            self.live.stop()
 
-                self._update_progress_and_log(
-                    epoch_done=epoch_done,
-                    optimizer_step_count=optimizer_step_count,
-                )
-
-                accumulated_steps = 0
-
-            epoch_done += 1
-
-        self.live.stop()
+        self.console.print("\n[bold green]Training completed![/bold green]")
+        self.console.print(f"[cyan]Total steps:[/cyan] {optimizer_step_count}")
+        self.console.print(f"[cyan]Epochs completed:[/cyan] {epoch_done}")
