@@ -4,12 +4,13 @@ from typing import Self
 
 import torch
 import torch.nn as nn
+from safetensors.torch import load_file, save_file
 
 from .base_config import BaseConfig
 
 
 class BaseModel(nn.Module):
-    SAVE_FILENAME = "pytorch_model.bin"
+    SAVE_FILENAME = "model.safetensors"
     config_class = BaseConfig
 
     def __init__(self, config: BaseConfig):
@@ -29,24 +30,29 @@ class BaseModel(nn.Module):
         model_folder = pathlib.Path(pretrained_model_path).resolve()
         model_file = model_folder / cls.SAVE_FILENAME
 
+        if not model_file.exists():
+            raise FileNotFoundError(f"Model file not found: {model_file}")
+
         config = cls.config_class.from_pretrained(model_folder)
         model = cls(config)
 
-        model_state_dict = torch.load(model_file, map_location=device_map)
+        model_state_dict = load_file(model_file, device=device_map)
         model.load_state_dict(model_state_dict)
-        model.to(device_map)
 
+        model.eval()
         return model
 
-    def save_pretrained(self, save_directory: str | os.PathLike):
+    def save_pretrained(
+        self, save_directory: str | os.PathLike, overwrite: bool = False
+    ):
         save_folder = pathlib.Path(save_directory).resolve()
-        model_path = save_folder / BaseModel.SAVE_FILENAME
+        model_path = save_folder / self.SAVE_FILENAME
 
-        if os.path.exists(model_path):
+        if model_path.exists() and not overwrite:
             raise ValueError(f"{model_path} file already exists")
 
         os.makedirs(save_folder, exist_ok=True)
 
-        torch.save(self.state_dict(), model_path)
+        save_file(self.state_dict(), model_path)
 
         self.config.save_pretrained(save_folder)
