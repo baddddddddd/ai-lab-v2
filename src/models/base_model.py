@@ -36,9 +36,10 @@ class BaseModel(nn.Module):
         config = cls.config_class.from_pretrained(model_folder)
         model = cls(config)
 
-        model_state_dict = load_file(model_file, device=device_map)
+        model_state_dict = load_file(model_file)
         model.load_state_dict(model_state_dict)
 
+        model.to(device_map)
         model.eval()
         return model
 
