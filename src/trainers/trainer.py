@@ -371,7 +371,7 @@ class Trainer:
             self.optimizer = self._create_optimizer()
 
         optimizer_file = checkpoint_folder / Trainer.OPTIMIZER_FILENAME
-        optimizer_state = torch.load(optimizer_file, weights_only=False)
+        optimizer_state = torch.load(optimizer_file, weights_only=True)
         self.optimizer.load_state_dict(optimizer_state)
 
     def _save_scheduler(self, save_folder: pathlib.Path):
@@ -384,7 +384,7 @@ class Trainer:
             self.scheduler = self._create_scheduler()
 
         scheduler_file = checkpoint_folder / Trainer.SCHEDULER_FILENAME
-        scheduler_state = torch.load(scheduler_file, weights_only=False)
+        scheduler_state = torch.load(scheduler_file, weights_only=True)
         self.scheduler.load_state_dict(scheduler_state)
 
         # hacky way to sync the scheduler and optimizer lr right away, dont hate me
@@ -404,7 +404,7 @@ class Trainer:
 
             scaler_file = checkpoint_folder / Trainer.SCALER_FILENAME
             if scaler_file.exists():
-                scaler_state = torch.load(scaler_file, weights_only=False)
+                scaler_state = torch.load(scaler_file, weights_only=True)
                 self.scaler.load_state_dict(scaler_state)
 
     def _save_rng_state(self, save_folder: pathlib.Path):
@@ -441,10 +441,6 @@ class Trainer:
     def _save_training_args(self, save_folder: pathlib.Path):
         training_args_file = save_folder / Trainer.TRAINING_ARGS_FILENAME
         torch.save(self.args, training_args_file)
-
-    def _load_training_args(self, checkpoint_folder: pathlib.Path):
-        training_args_file = checkpoint_folder / Trainer.TRAINING_ARGS_FILENAME
-        self.args = torch.load(training_args_file, weights_only=False)
 
     def _save_trainer_state(self, save_folder: pathlib.Path):
         trainer_state_file = save_folder / Trainer.TRAINER_STATE_FILENAME
@@ -564,7 +560,6 @@ class Trainer:
 
     def _resume_from_checkpoint(self, checkpoint_folder: pathlib.Path):
         self._load_trainer_state(checkpoint_folder)
-        self._load_training_args(checkpoint_folder)
         self._load_model(checkpoint_folder)
         self._load_optimizer(checkpoint_folder)
         self._load_scheduler(checkpoint_folder)
