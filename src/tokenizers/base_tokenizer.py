@@ -65,10 +65,7 @@ class BaseTokenizer:
                 input_ids.append(ids)
 
         if return_tensors == "pt":
-            if return_overflowing_tokens:
-                input_ids = torch.cat(input_ids)
-            else:
-                input_ids = torch.stack(input_ids)
+            input_ids = torch.cat(input_ids)
 
         encoded = {
             "input_ids": input_ids,
@@ -189,7 +186,7 @@ class BaseTokenizer:
                 ids += [self.pad_token_id] * pad_len
 
         if return_tensors == "pt":
-            return torch.LongTensor(ids)
+            return torch.LongTensor([ids])
         else:
             return ids
 
