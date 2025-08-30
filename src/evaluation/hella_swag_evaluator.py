@@ -8,10 +8,25 @@ from ..tokenizers import BaseTokenizer
 
 
 class HellaSwagEvaluator:
-    def __init__(self, model: BaseModel, tokenizer: BaseTokenizer):
+    def __init__(
+        self,
+        model: BaseModel,
+        tokenizer: BaseTokenizer,
+        device: str | torch.device | None = None,
+    ):
         self.model = model
         self.tokenizer = tokenizer
         self.dataset = None
+        self.device = device
+
+        if self.device is None:
+            self.device = (
+                torch.device("cuda")
+                if torch.cuda.is_available()
+                else torch.device("cpu")
+            )
+
+        self.model.to(self.device)
 
     def get_dataset(self, split: str = "validation"):
         return load_dataset("AlekseyKorshuk/hellaswag", split=split)
@@ -19,8 +34,12 @@ class HellaSwagEvaluator:
     def get_completion_probability(self, context: str, ending: str):
         full_text = context + " " + ending
 
-        context_tokens = self.tokenizer.encode(context, return_tensors="pt")
-        full_tokens = self.tokenizer.encode(full_text, return_tensors="pt")
+        context_tokens = self.tokenizer.encode(context, return_tensors="pt").to(
+            self.device
+        )
+        full_tokens = self.tokenizer.encode(full_text, return_tensors="pt").to(
+            self.device
+        )
 
         completion_start = context_tokens.size(1)
 
