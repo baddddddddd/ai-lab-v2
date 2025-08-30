@@ -19,19 +19,19 @@ class HellaSwagEvaluator:
     def get_completion_probability(self, context: str, ending: str):
         full_text = context + " " + ending
 
-        context_tokens = self.tokenizer.encode(context, return_tensors="pt")[0]
-        full_tokens = self.tokenizer.encode(full_text, return_tensors="pt")[0]
+        context_tokens = self.tokenizer.encode(context, return_tensors="pt")
+        full_tokens = self.tokenizer.encode(full_text, return_tensors="pt")
 
-        completion_start = context_tokens.size(0)
+        completion_start = context_tokens.size(1)
 
         with torch.no_grad():
-            output = self.model(full_tokens.unsqueeze(0))
+            output = self.model(full_tokens)
             logits = output.logits[0]
             log_probs = torch.log_softmax(logits, dim=-1)
 
         token_probs = []
-        for i in range(completion_start, full_tokens.size(0)):
-            expected_token = full_tokens[i]
+        for i in range(completion_start, full_tokens.size(1)):
+            expected_token = full_tokens[0, i]
             token_log_prob = log_probs[i - 1][expected_token]
             token_probs.append(token_log_prob.item())
 
