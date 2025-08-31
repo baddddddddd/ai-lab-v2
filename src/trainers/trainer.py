@@ -50,7 +50,7 @@ class Trainer:
         train_dataloader: DataLoader | None = None,
         eval_dataloader: DataLoader | None = None,
         optimizer: optim.Optimizer | None = None,
-        scheduler: optim.lr_scheduler._LRScheduler | None = None,
+        scheduler_cls_and_kwargs: tuple[type, dict] | None = None,
     ):
         self.model = model
         self.args = args
@@ -60,7 +60,8 @@ class Trainer:
         self.train_dataloader = train_dataloader
         self.eval_dataloader = eval_dataloader
         self.optimizer = optimizer
-        self.scheduler = scheduler
+        self.scheduler: optim.lr_scheduler._LRScheduler = None
+        self.scheduler_cls_and_kwargs = scheduler_cls_and_kwargs
 
         if self.args.device is not None:
             self.device = torch.device(self.args.device)
@@ -194,15 +195,19 @@ class Trainer:
         )
 
     def _create_scheduler(self):
-        if self.args.warmup_steps is None:
-            self.args.warmup_steps = math.ceil(
-                self.args.max_steps * self.args.warmup_ratio
-            )
+        if self.scheduler_cls_and_kwargs is not None:
+            scheduler_cls, scheduler_kwargs = self.scheduler_cls_and_kwargs
+            return scheduler_cls(optimizer=self.optimizer, **scheduler_kwargs)
+        else:
+            if self.args.warmup_steps is None:
+                self.args.warmup_steps = math.ceil(
+                    self.args.max_steps * self.args.warmup_ratio
+                )
 
-        return LinearWarmupLR(
-            optimizer=self.optimizer,
-            warmup_steps=self.args.warmup_steps,
-        )
+            return LinearWarmupLR(
+                optimizer=self.optimizer,
+                warmup_steps=self.args.warmup_steps,
+            )
 
     def _create_train_dataloader(self):
         return DataLoader(
@@ -338,7 +343,7 @@ class Trainer:
                 * self.args.gradient_accumulation_steps
             )
             avg_grad_norm = self._accumulated_grad_norm / self._grad_norm_steps
-            cur_lr = self.scheduler.get_last_lr()[0]
+            cur_lr = self.optimizer.param_groups[0]["lr"]
 
             self.metrics_data.append(
                 (self.current_epoch, self.current_step, avg_loss, cur_lr, avg_grad_norm)
@@ -381,8 +386,7 @@ class Trainer:
         torch.save(scheduler_state, scheduler_file)
 
     def _load_scheduler(self, checkpoint_folder: pathlib.Path):
-        if self.scheduler is None:
-            self.scheduler = self._create_scheduler()
+        self.scheduler = self._create_scheduler()
 
         scheduler_file = checkpoint_folder / Trainer.SCHEDULER_FILENAME
         scheduler_state = torch.load(scheduler_file, weights_only=True)
