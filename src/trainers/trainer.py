@@ -49,7 +49,7 @@ class Trainer:
         eval_dataset: Dataset | IterableDataset | None = None,
         train_dataloader: DataLoader | None = None,
         eval_dataloader: DataLoader | None = None,
-        optimizer: optim.Optimizer | None = None,
+        optimizer_cls_and_kwargs: tuple[type, dict] | None = None,
         scheduler_cls_and_kwargs: tuple[type, dict] | None = None,
     ):
         self.model = model
@@ -59,7 +59,8 @@ class Trainer:
         self.eval_dataset = eval_dataset
         self.train_dataloader = train_dataloader
         self.eval_dataloader = eval_dataloader
-        self.optimizer = optimizer
+        self.optimizer: optim.Optimizer = None
+        self.optimizer_cls_and_kwargs = optimizer_cls_and_kwargs
         self.scheduler: optim.lr_scheduler._LRScheduler = None
         self.scheduler_cls_and_kwargs = scheduler_cls_and_kwargs
 
@@ -186,6 +187,10 @@ class Trainer:
         return self.eval_dataloader
 
     def _create_optimizer(self):
+        if self.optimizer_cls_and_kwargs is not None:
+            optimizer_cls, optimizer_kwargs = self.optimizer_cls_and_kwargs
+            return optimizer_cls(params=self.model.parameters(), **optimizer_kwargs)
+
         return optim.AdamW(
             params=self.model.parameters(),
             lr=self.args.learning_rate,
@@ -198,16 +203,16 @@ class Trainer:
         if self.scheduler_cls_and_kwargs is not None:
             scheduler_cls, scheduler_kwargs = self.scheduler_cls_and_kwargs
             return scheduler_cls(optimizer=self.optimizer, **scheduler_kwargs)
-        else:
-            if self.args.warmup_steps is None:
-                self.args.warmup_steps = math.ceil(
-                    self.args.max_steps * self.args.warmup_ratio
-                )
 
-            return LinearWarmupLR(
-                optimizer=self.optimizer,
-                warmup_steps=self.args.warmup_steps,
+        if self.args.warmup_steps is None:
+            self.args.warmup_steps = math.ceil(
+                self.args.max_steps * self.args.warmup_ratio
             )
+
+        return LinearWarmupLR(
+            optimizer=self.optimizer,
+            warmup_steps=self.args.warmup_steps,
+        )
 
     def _create_train_dataloader(self):
         return DataLoader(
@@ -372,7 +377,6 @@ class Trainer:
         torch.save(optimizer_state, optimizer_file)
 
     def _load_optimizer(self, checkpoint_folder: pathlib.Path):
-        # NOTE: This  might be a problem in the future when we start using custom optimizers
         self.optimizer = self._create_optimizer()
 
         optimizer_file = checkpoint_folder / Trainer.OPTIMIZER_FILENAME
