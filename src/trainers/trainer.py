@@ -367,12 +367,13 @@ class Trainer:
         torch.save(optimizer_state, optimizer_file)
 
     def _load_optimizer(self, checkpoint_folder: pathlib.Path):
-        if self.optimizer is None:
-            self.optimizer = self._create_optimizer()
+        # NOTE: This  might be a problem in the future when we start using custom optimizers
+        self.optimizer = self._create_optimizer()
 
         optimizer_file = checkpoint_folder / Trainer.OPTIMIZER_FILENAME
-        optimizer_state = torch.load(optimizer_file, weights_only=True)
-        self.optimizer.load_state_dict(optimizer_state)
+        if optimizer_file.exists():
+            optimizer_state = torch.load(optimizer_file, map_location=self.device)
+            self.optimizer.load_state_dict(optimizer_state)
 
     def _save_scheduler(self, save_folder: pathlib.Path):
         scheduler_file = save_folder / Trainer.SCHEDULER_FILENAME
