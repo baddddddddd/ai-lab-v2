@@ -1,3 +1,5 @@
+import re
+
 import sentencepiece as spm
 import torch
 
@@ -30,6 +32,10 @@ class LlamaTokenizer(BaseTokenizer):
         self.special_tokens = set(
             [tok for tok in [unk_token, bos_token, eos_token] if tok is not None]
         )
+
+        pattern = "(" + "|".join((re.escape(tok) for tok in self.special_tokens)) + ")"
+        self.split_token_re = re.compile(pattern)
+
         super().__init__(
             unk_token=unk_token,
             bos_token=bos_token,
@@ -78,8 +84,17 @@ class LlamaTokenizer(BaseTokenizer):
     def vocab_size(self) -> int:
         return len(self.vocab)
 
-    def _tokenize(self, text: str) -> list[str]:
-        return self.tokenizer.encode_as_pieces(text)
+    def _tokenize(self, text: str, **kwargs) -> list[str]:
+        parts = self.split_token_re.split(text)
+
+        tokens = []
+        for part in parts:
+            if part in self.special_tokens:
+                tokens.append(part)
+            else:
+                tokens.extend(self.tokenizer.encode_as_pieces(part))
+
+        return tokens
 
     def _convert_token_to_id(self, token: str) -> int:
         return self.tokenizer.piece_to_id(token)
@@ -105,16 +120,10 @@ class LlamaTokenizer(BaseTokenizer):
         return out
 
     def build_inputs_with_special_tokens(self, token_ids: list[int]) -> list[int]:
-        return token_ids
+        prepend = [self.bos_token_id] if self.add_bos_token else []
+        append = [self.eos_token_id] if self.add_eos_token else []
+
+        return prepend + token_ids + append
 
     def num_special_tokens_to_add(self):
-        return 0
-
-    def _encode(self, text: str, **kwargs) -> list[int]:
-        add_special_tokens = kwargs.get("add_special_tokens", True)
-
-        return self.tokenizer.encode_as_ids(
-            text,
-            add_bos=add_special_tokens and self.add_bos_token,
-            add_eos=add_special_tokens and self.add_eos_token,
-        )
+        return int(self.add_bos_token) + int(self.add_eos_token)
