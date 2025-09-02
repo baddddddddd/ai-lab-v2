@@ -2,6 +2,7 @@ import itertools
 import re
 import string
 
+import jinja2
 import torch
 
 
@@ -15,6 +16,7 @@ class BaseTokenizer:
         sep_token: str | None = None,
         cls_token: str | None = None,
         mask_token: str | None = None,
+        chat_template: str | None = None,
     ):
         self.unk_token = unk_token
         self.bos_token = bos_token
@@ -23,6 +25,7 @@ class BaseTokenizer:
         self.sep_token = sep_token
         self.cls_token = cls_token
         self.mask_token = mask_token
+        self.chat_template = chat_template
 
         self.unk_token_id = self._convert_token_to_id(unk_token) if unk_token else None
         self.bos_token_id = self._convert_token_to_id(bos_token) if bos_token else None
@@ -33,6 +36,9 @@ class BaseTokenizer:
         self.mask_token_id = (
             self._convert_token_to_id(mask_token) if mask_token else None
         )
+
+        if self.chat_template is None:
+            self.chat_template = "{%- for message in messages %}{{ '' if loop.first else '\n' }}### {{ message['role'] | title }}:\n{{ message['content'].strip() }}{{ eos_token if eos_token and message['role'] == 'assistant' else '' }}{% endfor -%}{{ '\n### Assistant:' if add_generation_prompt else '' }}"
 
     def __call__(
         self,
@@ -136,7 +142,18 @@ class BaseTokenizer:
         return_overflowing_tokens: bool = False,
         **kwargs,
     ) -> list[int] | list[list[int]] | torch.Tensor:
-        text, kwargs = self.prepare_for_tokenization(text, **kwargs)
+        all_kwargs = {
+            "add_special_tokens": add_special_tokens,
+            "padding": padding,
+            "truncation": truncation,
+            "max_length": max_length,
+            "stride": stride,
+            "return_tensors": return_tensors,
+            "return_overflowing_tokens": return_overflowing_tokens,
+            **kwargs,
+        }
+
+        text, kwargs = self.prepare_for_tokenization(text, **all_kwargs)
         ids = self._encode(text, **kwargs)
 
         if truncation:
@@ -210,3 +227,54 @@ class BaseTokenizer:
             sequences = sequences.tolist()
 
         return self._batch_decode(sequences)
+
+    def apply_chat_template(
+        self,
+        conversation: list[dict[str, str]] | list[list[dict[str, str]]],
+        chat_template: str | None = None,
+        tokenize: bool = True,
+        add_generation_prompt: bool = False,
+        return_tensors: str | None = None,
+        **tokenizer_kwargs,
+    ):
+        if isinstance(conversation, list) and isinstance(conversation[0], dict):
+            is_batched = False
+            conversation_list = [conversation]
+        else:
+            is_batched = True
+            conversation_list = conversation
+
+        template = jinja2.Template(
+            self.chat_template if chat_template is None else chat_template
+        )
+
+        formatted_list = []
+        for conversation in conversation_list:
+            formatted = template.render(
+                messages=conversation,
+                add_generation_prompt=add_generation_prompt,
+                # might be better to create a dict of special tokens
+                unk_token=self.unk_token,
+                bos_token=self.bos_token,
+                eos_token=self.eos_token,
+                pad_token=self.pad_token,
+                cls_token=self.cls_token,
+                sep_token=self.sep_token,
+                mask_token=self.mask_token,
+            )
+
+            formatted_list.append(formatted)
+
+        if not tokenize:
+            return formatted_list if is_batched else formatted_list[0]
+
+        encoded = self(
+            formatted_list,
+            return_tensors=return_tensors,
+            **tokenizer_kwargs,
+        )["input_ids"]
+
+        if return_tensors == "pt":
+            return encoded
+
+        return encoded if is_batched else encoded[0]

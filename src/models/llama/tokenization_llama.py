@@ -111,72 +111,10 @@ class LlamaTokenizer(BaseTokenizer):
         return 0
 
     def _encode(self, text: str, **kwargs) -> list[int]:
+        add_special_tokens = kwargs.get("add_special_tokens", True)
+
         return self.tokenizer.encode_as_ids(
-            text, add_bos=self.add_bos_token, add_eos=self.add_eos_token
+            text,
+            add_bos=add_special_tokens and self.add_bos_token,
+            add_eos=add_special_tokens and self.add_eos_token,
         )
-
-    def apply_chat_template(
-        self,
-        conversation: list[dict[str, str]] | list[list[dict[str, str]]],
-        tokenize: bool = True,
-        add_generation_prompt: bool = False,
-        return_tensors: str | None = None,
-    ):
-        user_label = "Human: "
-        assistant_label = "\n\nAI: "
-        tokenized_assistant_label = self._tokenize(assistant_label)
-
-        if isinstance(conversation, list) and isinstance(conversation[0], dict):
-            is_batched = False
-            conversation_list = [conversation]
-        else:
-            is_batched = True
-            conversation_list = conversation
-
-        batched_tokens = []
-        for conversation in conversation_list:
-            is_user_turn = True
-            conversation_tokens = []
-            for turn in conversation:
-                role = turn["role"]
-                if (is_user_turn and role != "user") or (
-                    not is_user_turn and role != "assistant"
-                ):
-                    raise ValueError(
-                        "Conversation roles must alternate user/assistant/user/assistant/..."
-                    )
-
-                content = turn["content"]
-
-                if is_user_turn:
-                    prepend, append = [self.bos_token], []
-                    template = user_label + content
-                else:
-                    prepend, append = [], [self.eos_token]
-                    template = assistant_label + content
-
-                tokens = prepend + self._tokenize(template) + append
-                conversation_tokens += tokens
-
-                is_user_turn = not is_user_turn
-
-            if add_generation_prompt:
-                conversation_tokens += tokenized_assistant_label
-
-            batched_tokens.append(conversation_tokens)
-
-        if tokenize:
-            batched_result = [
-                self.convert_tokens_to_ids(tokens) for tokens in batched_tokens
-            ]
-
-            if return_tensors == "pt":
-                batched_result = torch.LongTensor(batched_result)
-                return batched_result
-
-        else:
-            batched_result = [
-                self._convert_tokens_to_string(tokens) for tokens in batched_tokens
-            ]
-
-        return batched_result if is_batched else batched_result[0]
