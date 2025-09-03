@@ -1,5 +1,3 @@
-import math
-
 import torch
 import torch.nn.functional as F
 from datasets import load_dataset, Dataset
@@ -30,64 +28,46 @@ class WikiText2PerplexityEvaluator:
                 else torch.device("cpu")
             )
 
-        self.model.to(device)
+        self.model.to(self.device)
 
     def get_dataset(self, split: str = "validation"):
         return load_dataset("dlwh/wikitext_2_detokenized", split=split)
 
     def tokenize_dataset(self, dataset: Dataset, max_length: int):
-        def tokenize_fn(examples):
-            return self.tokenizer(
-                examples["text"],
-                padding=True,
-                truncation=True,
-                max_length=max_length + 1,
-                stride=1,
-                return_overflowing_tokens=True,
-            )
-
-        return dataset.map(tokenize_fn, batched=True, remove_columns=["text"])
+        encodings = self.tokenizer.encode(
+            "\n\n".join(dataset["text"]), return_tensors="pt"
+        )
+        return encodings
 
     @torch.no_grad()
-    def evaluate(self, max_length: int, batch_size: int, split: str = "validation"):
+    def evaluate(self, max_length: int, split: str = "validation"):
         self.model.eval()
 
         dataset = self.get_dataset(split=split)
-        tokenized_dataset = self.tokenize_dataset(dataset, max_length=max_length)
+        encodings = self.tokenize_dataset(dataset, max_length=max_length)
+        nll_sum = 0.0
+        n_tokens = 0
 
-        total_loss = 0.0
-        total_tokens = 0
-
-        iterator = tqdm(
-            range(0, len(tokenized_dataset), batch_size), desc="WikiText-2 Perplexity"
-        )
-        for i in iterator:
-            batch = tokenized_dataset.select(
-                range(i, min(len(tokenized_dataset), i + batch_size))
-            ).to_dict()
-            input_ids = torch.LongTensor(batch["input_ids"]).to(self.device)
+        for i in tqdm(
+            range(0, encodings.size(1), max_length), desc="WikiText-2 Perplexity"
+        ):
+            input_ids = encodings[:, i : i + max_length + 1].to(self.device)
             labels = input_ids.clone()
 
             input_ids = input_ids[..., :-1]
             labels = labels[..., 1:]
 
-            labels[labels == self.tokenizer.pad_token_id] = -100
-
-            output = self.model(
+            outputs = self.model(
                 input_ids=input_ids,
                 labels=labels,
             )
 
-            logits = output.logits
+            neg_log_likelihood = outputs.loss
 
-            x = logits.reshape(-1, logits.size(-1))
-            y = labels.reshape(-1)
+            num_loss_tokens = (labels != -100).sum().item()
+            nll_sum += neg_log_likelihood * num_loss_tokens
+            n_tokens += num_loss_tokens
 
-            loss_per_token = F.cross_entropy(x, y, reduction="none", ignore_index=-100)
-
-            total_loss += loss_per_token.sum().item()
-            total_tokens += (labels != -100).sum().item()
-
-        avg_loss = total_loss / total_tokens
-        ppl = math.exp(avg_loss)
+        avg_loss = nll_sum / n_tokens
+        ppl = torch.exp(avg_loss).item()
         return ppl
