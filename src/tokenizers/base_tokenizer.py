@@ -38,7 +38,7 @@ class BaseTokenizer:
         )
 
         if self.chat_template is None:
-            self.chat_template = "{{ bos_token if bos_token else '' }}{%- for message in messages %}{{ '' if loop.first else '\n' }}### {{ message['role'] | title }}:\n{{ message['content'].strip() }}{{ eos_token if eos_token and message['role'] == 'assistant' else '' }}{% endfor -%}{{ '\n### Assistant:' if add_generation_prompt else '' }}"
+            self.chat_template = "{{ bos_token if bos_token else '' }}{%- for message in messages %}{{ '' if loop.first else '\n' }}### {{ message['role'] | title }}:\n{{ message['content'].strip() }}{{ eos_token if eos_token and message['role'] == 'assistant' else '' }}{% endfor -%}{{ '\n### Assistant:\n' if add_generation_prompt else '' }}"
 
     def __call__(
         self,
