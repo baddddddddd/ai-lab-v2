@@ -30,7 +30,7 @@ class WikiText2PerplexityEvaluator:
 
         self.model.to(self.device)
 
-    def get_dataset(self, split: str = "validation"):
+    def get_dataset(self, split: str = "test"):
         return load_dataset("dlwh/wikitext_2_detokenized", split=split)
 
     def tokenize_dataset(self, dataset: Dataset, max_length: int):
@@ -40,7 +40,7 @@ class WikiText2PerplexityEvaluator:
         return encodings
 
     @torch.no_grad()
-    def evaluate(self, max_length: int, split: str = "validation"):
+    def evaluate(self, max_length: int, split: str = "test"):
         self.model.eval()
 
         dataset = self.get_dataset(split=split)
