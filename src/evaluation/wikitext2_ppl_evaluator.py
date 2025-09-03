@@ -65,7 +65,7 @@ class WikiText2PerplexityEvaluator:
             batch = tokenized_dataset.select(
                 range(i, min(len(tokenized_dataset), i + batch_size))
             ).to_dict()
-            input_ids = torch.LongTensor(batch["input_ids"], device=self.device)
+            input_ids = torch.LongTensor(batch["input_ids"]).to(self.device)
             labels = input_ids.clone()
 
             input_ids = input_ids[..., :-1]
