@@ -77,7 +77,7 @@ class Trainer:
         if self.args.fp16:
             if not torch.cuda.is_available():
                 raise ValueError("FP16 training requires CUDA")
-            self.scaler = torch.cuda.amp.GradScaler()
+            self.scaler = torch.amp.GradScaler("cuda")
 
         # logging
         self.current_step = 0
@@ -249,7 +249,7 @@ class Trainer:
 
     def _compute_loss(self, inputs: dict) -> torch.FloatTensor:
         if self.args.fp16:
-            with torch.cuda.amp.autocast():
+            with torch.amp.autocast("cuda"):
                 output = self.model.forward(**inputs)
                 loss = output.loss
         else:
@@ -411,7 +411,7 @@ class Trainer:
     def _load_scaler(self, checkpoint_folder: pathlib.Path):
         if self.args.fp16:
             if self.scaler is None:
-                self.scaler = torch.cuda.amp.GradScaler()
+                self.scaler = torch.amp.GradScaler("cuda")
 
             scaler_file = checkpoint_folder / Trainer.SCALER_FILENAME
             if scaler_file.exists():
