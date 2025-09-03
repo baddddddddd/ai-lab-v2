@@ -91,7 +91,7 @@ class LlamaTokenizer(BaseTokenizer):
         for part in parts:
             if part in self.special_tokens:
                 tokens.append(part)
-            else:
+            elif part:
                 tokens.extend(self.tokenizer.encode_as_pieces(part))
 
         return tokens
