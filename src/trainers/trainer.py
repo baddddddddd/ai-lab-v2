@@ -224,6 +224,7 @@ class Trainer:
             prefetch_factor=self.args.dataloader_prefetch_factor,
             pin_memory=self.args.dataloader_pin_memory,
             persistent_workers=self.args.dataloader_persistent_workers,
+            shuffle=self.args.dataloader_shuffle,
         )
 
     def _create_eval_dataloader(self):
@@ -236,6 +237,7 @@ class Trainer:
             prefetch_factor=self.args.dataloader_prefetch_factor,
             pin_memory=self.args.dataloader_pin_memory,
             persistent_workers=self.args.dataloader_persistent_workers,
+            shuffle=self.args.dataloader_shuffle,
         )
 
     def _prepare_inputs(self, inputs: dict) -> dict:

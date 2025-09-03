@@ -28,6 +28,7 @@ class TrainingArguments:
         dataloader_prefetch_factor: int | None = None,
         dataloader_pin_memory: bool = True,
         dataloader_persistent_workers: bool = False,
+        dataloader_shuffle: bool = False,
         fp16: bool = False,
     ):
         self.output_dir = Path(output_dir)
@@ -59,5 +60,6 @@ class TrainingArguments:
         self.dataloader_prefetch_factor = dataloader_prefetch_factor
         self.dataloader_pin_memory = dataloader_pin_memory
         self.dataloader_persistent_workers = dataloader_persistent_workers
+        self.dataloader_shuffle = dataloader_shuffle
 
         self.fp16 = fp16
