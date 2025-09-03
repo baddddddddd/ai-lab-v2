@@ -1,1 +1,2 @@
 from .hella_swag_evaluator import HellaSwagEvaluator
+from .wikitext2_ppl_evaluator import WikiText2PerplexityEvaluator
