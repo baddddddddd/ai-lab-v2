@@ -8,10 +8,30 @@ from ..model_output import CausalLmOutput
 from .configuration_llama import LlamaConfig
 
 
-def precompute_cos_sin_tables(n_ctx: int, d_head):
+# static RoPE
+# def precompute_cos_sin_tables(n_ctx: int, d_head: int):
+#     positions = torch.arange(n_ctx, dtype=torch.float32)
+#     dims = torch.arange(d_head, dtype=torch.float32) // 2
+#     theta = torch.pow(10000, -2 * dims / d_head)
+#     angles = positions[:, None] * theta[None, :]
+
+#     return angles.cos(), angles.sin()
+
+
+# ntk-aware scaling
+def precompute_cos_sin_tables(
+    n_ctx: int,
+    d_head: int,
+    base: float = 500.0,
+    factor: float = 1.0,
+):
     positions = torch.arange(n_ctx, dtype=torch.float32)
     dims = torch.arange(d_head, dtype=torch.float32) // 2
-    theta = torch.pow(10000, -2 * dims / d_head)
+
+    ntk_factor = factor ** (d_head / (d_head - 2))
+    adjusted_base = base * ntk_factor
+
+    theta = torch.pow(adjusted_base, -2 * dims / d_head)
     angles = positions[:, None] * theta[None, :]
 
     return angles.cos(), angles.sin()
@@ -125,6 +145,7 @@ class LlamaModel(BaseModel, CausalLmGenerationMixin):
 
     def __init__(self, config: LlamaConfig):
         super().__init__(config)
+        self.config: LlamaConfig
 
         self.token_embedding = nn.Embedding(
             num_embeddings=config.vocab_size,
@@ -140,9 +161,7 @@ class LlamaModel(BaseModel, CausalLmGenerationMixin):
 
         self.final_norm = nn.RMSNorm(config.d_model, eps=1e-6)
 
-        cos, sin = precompute_cos_sin_tables(config.n_ctx, config.d_head)
-        self.register_buffer("cos_cached", cos, persistent=False)
-        self.register_buffer("sin_cached", sin, persistent=False)
+        self.precompute_rope_cache()
 
         self.apply(self._init_weights)
 
@@ -155,6 +174,20 @@ class LlamaModel(BaseModel, CausalLmGenerationMixin):
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=0.02)
+
+    def precompute_rope_cache(self, factor: float = 1.0):
+        cos, sin = precompute_cos_sin_tables(
+            n_ctx=self.config.n_ctx,
+            d_head=self.config.d_head,
+            base=self.config.rope_theta,
+            factor=factor,
+        )
+        self.register_buffer("cos_cached", cos, persistent=False)
+        self.register_buffer("sin_cached", sin, persistent=False)
+
+    def extend_rope(self, factor: float):
+        self.config.n_ctx = int(self.config.n_ctx * factor)
+        self.precompute_rope_cache(factor)
 
     def forward(
         self,

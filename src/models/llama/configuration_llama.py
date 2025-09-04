@@ -11,6 +11,7 @@ class LlamaConfig(BaseConfig):
         n_heads: int,
         bos_token_id: int,
         eos_token_id: int,
+        rope_theta: float = 500.0,
     ):
         self.vocab_size = vocab_size
         self.n_ctx = n_ctx
@@ -19,6 +20,7 @@ class LlamaConfig(BaseConfig):
         self.n_heads = n_heads
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.rope_theta = rope_theta
 
         self.d_ff = 8 * d_model // 3
         self.d_head = d_model // n_heads
