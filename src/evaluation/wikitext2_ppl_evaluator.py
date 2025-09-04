@@ -1,3 +1,5 @@
+import math
+
 import torch
 import torch.nn.functional as F
 from datasets import load_dataset, Dataset
@@ -57,17 +59,23 @@ class WikiText2PerplexityEvaluator:
             input_ids = input_ids[..., :-1]
             labels = labels[..., 1:]
 
-            outputs = self.model(
-                input_ids=input_ids,
-                labels=labels,
-            )
+            outputs = self.model(input_ids)
 
-            neg_log_likelihood = outputs.loss
+            logits = outputs.logits
+            logits = logits.reshape(-1, logits.size(-1))
+            labels = labels.reshape(-1)
+
+            loss_per_token = F.cross_entropy(
+                logits,
+                labels,
+                reduction="none",
+                ignore_index=-100,
+            )
+            nll_sum += loss_per_token.sum().item()
 
             num_loss_tokens = (labels != -100).sum().item()
-            nll_sum += neg_log_likelihood * num_loss_tokens
             n_tokens += num_loss_tokens
 
         avg_loss = nll_sum / n_tokens
-        ppl = torch.exp(avg_loss).item()
+        ppl = math.exp(avg_loss)
         return ppl
