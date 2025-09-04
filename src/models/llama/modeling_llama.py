@@ -22,7 +22,7 @@ from .configuration_llama import LlamaConfig
 def precompute_cos_sin_tables(
     n_ctx: int,
     d_head: int,
-    base: float = 500.0,
+    base: float = 10000.0,
     factor: float = 1.0,
 ):
     positions = torch.arange(n_ctx, dtype=torch.float32)

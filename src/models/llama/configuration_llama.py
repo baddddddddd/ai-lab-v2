@@ -11,7 +11,7 @@ class LlamaConfig(BaseConfig):
         n_heads: int,
         bos_token_id: int,
         eos_token_id: int,
-        rope_theta: float = 500.0,
+        rope_theta: float = 10000.0,
     ):
         self.vocab_size = vocab_size
         self.n_ctx = n_ctx
